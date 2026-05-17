@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>🎁 123456btc 幸运盲盒</title>
+  <link rel="stylesheet" href="/blindbox/blindbox.css">
+</head>
+<body>
+  <div class="app">
+    <!-- 顶部 -->
+    <header class="header">
+      <a href="/" class="back">← 返回</a>
+      <h1>🎁 幸运盲盒</h1>
+      <div class="balance" id="user-balance">-- BBT</div>
+    </header>
+
+    <!-- 奖池累计 -->
+    <div class="jackpot-banner">
+      <div class="jackpot-label">💎 超级大奖池</div>
+      <div class="jackpot-amount" id="jackpot-pool">0 BBT</div>
+      <div class="jackpot-desc">每开一个盒，奖池都在膨胀</div>
+    </div>
+
+    <!-- 盲盒区域 -->
+    <div class="box-stage">
+      <div class="box-container" id="box-container">
+        <div class="mystery-box" id="mystery-box">
+          <div class="box-lid"></div>
+          <div class="box-body">
+            <span class="box-icon">🎁</span>
+          </div>
+          <div class="box-glow"></div>
+        </div>
+      </div>
+      <button class="open-btn" id="open-btn" onclick="openBox()">
+        <span class="btn-text">10 BBT 开一次</span>
+        <span class="btn-shine"></span>
+      </button>
+      <p class="daily-limit" id="daily-limit">今日剩余 50 次</p>
+    </div>
+
+    <!-- 概率公示 -->
+    <div class="prob-section">
+      <h3>📋 奖品概率公示</h3>
+      <div class="prob-list" id="prob-list"></div>
+    </div>
+
+    <!-- 最近开盒 -->
+    <div class="history-section">
+      <h3>🔥 最近开盒</h3>
+      <div class="history-list" id="history-list"></div>
+    </div>
+
+    <!-- 我的奖品 -->
+    <div class="my-prizes-section">
+      <h3>🎒 我的奖品</h3>
+      <div class="prize-list" id="prize-list"></div>
+    </div>
+  </div>
+
+  <!-- 开盒结果弹窗 -->
+  <div class="result-modal hidden" id="result-modal">
+    <div class="result-overlay" onclick="closeModal()"></div>
+    <div class="result-content">
+      <div class="result-animation" id="result-animation">
+        <div class="particles" id="particles"></div>
+        <div class="prize-reveal" id="prize-reveal">
+          <div class="prize-icon" id="prize-icon">🎁</div>
+          <div class="prize-name" id="prize-name">...</div>
+          <div class="prize-tag" id="prize-tag">...</div>
+        </div>
+      </div>
+      <button class="confirm-btn" onclick="closeModal()">收下奖品</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/@solana/web3.js@1.91.0/lib/index.iife.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/blindbox/blindbox.js"></script>
+</body>
+</html>

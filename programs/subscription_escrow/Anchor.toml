@@ -1,0 +1,22 @@
+[features]
+seeds = false
+skip-lint = false
+
+[programs.localnet]
+subscription_escrow = "SubsEsc1111111111111111111111111111111111112"
+
+[programs.devnet]
+subscription_escrow = "SubsEsc1111111111111111111111111111111111112"
+
+[programs.mainnet]
+subscription_escrow = "SubsEsc1111111111111111111111111111111111112"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "npx tsx tests/escrow.ts"

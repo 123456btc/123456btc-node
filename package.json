@@ -36,6 +36,12 @@
     "trading"
   ],
   "license": "Apache-2.0",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE",
+    ".env.example"
+  ],
   "dependencies": {
     "@chainsafe/libp2p-gossipsub": "^14.1.2",
     "@libp2p/bootstrap": "^12.0.20",

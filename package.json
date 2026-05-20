@@ -1,5 +1,5 @@
 {
-  "name": "@123456btc/node",
+  "name": "@123456btc/123456btc-node",
   "version": "0.2.0",
   "description": "Decentralized strategy service node for 123456btc — run your own signal hub, subscription store, and BBT settlement",
   "main": "dist/index.js",

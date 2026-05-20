@@ -24,7 +24,7 @@ echo ""
 echo "[1/6] Initializing Provider node on port 1119..."
 $NODE init \
   --provider-name "TestProvider" \
-  --wallet "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" \
+  --wallet "3s4AK2x2nGkKP8ZADbcKuhdPr3coSuh1XnwZEzWgpump" \
   --role provider \
   --port 1119
 

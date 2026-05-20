@@ -95,7 +95,7 @@ export class JupiterClient {
     if (params.asLegacyTransaction) url.searchParams.set('asLegacyTransaction', 'true');
 
     try {
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), { signal: AbortSignal.timeout(10_000) });
       if (!res.ok) {
         const err = await res.text();
         this.logger.warn('Jupiter quote failed', { status: res.status, err });
@@ -119,6 +119,7 @@ export class JupiterClient {
       const res = await fetch(`${JUPITER_QUOTE_API}/swap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10_000),
         body: JSON.stringify({
           quoteResponse: quote,
           userPublicKey,
@@ -148,6 +149,7 @@ export class JupiterClient {
       const res = await fetch(`${JUPITER_QUOTE_API}/swap-instructions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10_000),
         body: JSON.stringify({
           quoteResponse: quote,
           userPublicKey,
@@ -165,7 +167,7 @@ export class JupiterClient {
   async getPrice(mints: string[]): Promise<Record<string, { price: number; vsToken: string }>> {
     try {
       const ids = mints.join(',');
-      const res = await fetch(`${JUPITER_PRICE_API}/price?ids=${ids}`);
+      const res = await fetch(`${JUPITER_PRICE_API}/price?ids=${ids}`, { signal: AbortSignal.timeout(10_000) });
       if (!res.ok) return {};
       const data = await res.json() as { data: Record<string, { price: number; vsToken: string }> };
       return data.data || {};

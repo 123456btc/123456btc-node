@@ -30,15 +30,18 @@ export type WorkerResult =
 @singleton()
 export class WorkerPool {
   private workers: Worker[] = [];
-  private queue: { task: WorkerTask; resolve: (result: WorkerResult) => void; reject: (err: Error) => void }[] = [];
-  private busy = new Set<Worker>();
+  private queue: { id: number; task: WorkerTask }[] = [];
+  private busy = new Map<Worker, number>();
+  private taskCounter = 0;
+  private pendingTasks = new Map<number, { resolve: (result: WorkerResult) => void; reject: (err: Error) => void }>();
   private scriptPath: string;
 
   constructor(
     private logger: Logger,
     private poolSize = Math.max(2, os.cpus().length - 1),
   ) {
-    this.scriptPath = new URL('./WorkerScript.js', import.meta.url).pathname;
+    // CJS-compatible: use __filename instead of import.meta.url
+    this.scriptPath = __filename;
   }
 
   async init(): Promise<void> {
@@ -82,9 +85,9 @@ export class WorkerPool {
               default:
                 throw new Error('Unknown task type: ' + task.type);
             }
-            parentPort.postMessage({ success: true, result: { type: task.type, [getResultKey(task.type)]: result } });
+            parentPort.postMessage({ success: true, result: { type: task.type, [getResultKey(task.type)]: result }, _taskId: task._taskId });
           } catch (err) {
-            parentPort.postMessage({ success: false, error: err.message });
+            parentPort.postMessage({ success: false, error: err.message, _taskId: task._taskId });
           }
         });
 
@@ -106,7 +109,9 @@ export class WorkerPool {
 
   async execute(task: WorkerTask): Promise<WorkerResult> {
     return new Promise((resolve, reject) => {
-      this.queue.push({ task, resolve, reject });
+      const id = ++this.taskCounter;
+      this.pendingTasks.set(id, { resolve, reject });
+      this.queue.push({ id, task });
       this.dispatch();
     });
   }
@@ -117,21 +122,30 @@ export class WorkerPool {
     if (!available) return;
 
     const job = this.queue.shift()!;
-    this.busy.add(available);
-    available.postMessage(job.task);
+    this.busy.set(available, job.id);
+    available.postMessage({ ...job.task, _taskId: job.id });
   }
 
-  private handleMessage(worker: Worker, msg: { success: boolean; result?: WorkerResult; error?: string }): void {
+  private handleMessage(worker: Worker, msg: { success: boolean; result?: WorkerResult; error?: string; _taskId?: number }): void {
+    const taskId = this.busy.get(worker);
     this.busy.delete(worker);
-    // 找到对应的 resolve/reject（简化：按顺序匹配）
-    // 实际生产环境应使用 messageId 匹配
-    if (msg.success && msg.result) {
-      // 这里简化处理，实际应通过 correlationId 匹配
+
+    if (taskId !== undefined) {
+      const pending = this.pendingTasks.get(taskId);
+      if (pending) {
+        this.pendingTasks.delete(taskId);
+        if (msg.success && msg.result) {
+          pending.resolve(msg.result);
+        } else {
+          pending.reject(new Error(msg.error || 'Worker task failed'));
+        }
+      }
     }
+
     this.dispatch();
   }
 
-  terminate(): Promise<void[]> {
+  terminate(): Promise<number[]> {
     return Promise.all(this.workers.map((w) => w.terminate()));
   }
 }

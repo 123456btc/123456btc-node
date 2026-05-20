@@ -1,0 +1,2437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>123456btc InscriptionForge</title>
+<style>
+/* ═══════════════════════════════════════════════════════
+   CSS Variables & Reset
+   ═══════════════════════════════════════════════════════ */
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-card: rgba(18, 18, 28, 0.85);
+  --bg-card-hover: rgba(28, 28, 42, 0.9);
+  --text-primary: #e8e8f0;
+  --text-secondary: #8888a0;
+  --text-muted: #555570;
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --bronze: #cd7f32;
+  --bronze-glow: rgba(205, 127, 50, 0.4);
+  --silver: #c0c0c0;
+  --silver-glow: rgba(192, 192, 192, 0.4);
+  --gold: #ffd700;
+  --gold-glow: rgba(255, 215, 0, 0.4);
+  --diamond: #b9f2ff;
+  --diamond-glow: rgba(185, 242, 255, 0.4);
+  --accent: #6c5ce7;
+  --accent-glow: rgba(108, 92, 231, 0.3);
+  --success: #00e676;
+  --danger: #ff4757;
+  --warning: #ffa502;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --font: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  --max-w: 480px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 15px; -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+/* Background grid pattern */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(ellipse 800px 600px at 50% 0%, rgba(108, 92, 231, 0.08), transparent),
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Layout
+   ═══════════════════════════════════════════════════════ */
+.app {
+  position: relative;
+  z-index: 1;
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 0 16px 100px;
+}
+
+section {
+  margin-bottom: 32px;
+}
+
+.section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  padding-left: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Header
+   ═══════════════════════════════════════════════════════ */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 0 24px;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-logo {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, var(--accent), #a29bfe);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 900;
+  color: #fff;
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+
+.header-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #e8e8f0, #a29bfe);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.02em;
+}
+
+.header-subtitle {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wallet-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bbt-balance {
+  display: none;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--gold);
+  font-family: var(--font-mono);
+  background: rgba(255, 215, 0, 0.08);
+  padding: 6px 10px;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(255, 215, 0, 0.15);
+}
+
+.bbt-balance.show { display: flex; align-items: center; gap: 4px; }
+.bbt-balance .bbt-icon { font-size: 0.7rem; }
+
+.btn-wallet {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-glass);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(10px);
+  font-family: var(--font);
+  white-space: nowrap;
+}
+
+.btn-wallet:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.btn-wallet.connected {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.wallet-truncated {
+  display: none;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wallet-truncated.show { display: inline; }
+
+/* ═══════════════════════════════════════════════════════
+   Glass Card Base
+   ═══════════════════════════════════════════════════════ */
+.glass {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Forge Section
+   ═══════════════════════════════════════════════════════ */
+.tier-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.tier-card {
+  position: relative;
+  padding: 18px 14px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow: hidden;
+}
+
+.tier-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.tier-card:hover { transform: translateY(-2px); }
+.tier-card:hover::before { opacity: 1; }
+.tier-card.selected { transform: translateY(-2px); }
+.tier-card.selected::before { opacity: 1; }
+
+.tier-card[data-tier="bronze"]::before { background: radial-gradient(ellipse at center, var(--bronze-glow), transparent 70%); }
+.tier-card[data-tier="silver"]::before { background: radial-gradient(ellipse at center, var(--silver-glow), transparent 70%); }
+.tier-card[data-tier="gold"]::before { background: radial-gradient(ellipse at center, var(--gold-glow), transparent 70%); }
+.tier-card[data-tier="diamond"]::before { background: radial-gradient(ellipse at center, var(--diamond-glow), transparent 70%); }
+
+.tier-card.selected[data-tier="bronze"] { border-color: var(--bronze); box-shadow: 0 0 30px var(--bronze-glow); }
+.tier-card.selected[data-tier="silver"] { border-color: var(--silver); box-shadow: 0 0 30px var(--silver-glow); }
+.tier-card.selected[data-tier="gold"] { border-color: var(--gold); box-shadow: 0 0 30px var(--gold-glow); }
+.tier-card.selected[data-tier="diamond"] { border-color: var(--diamond); box-shadow: 0 0 30px var(--diamond-glow); }
+
+.tier-icon {
+  font-size: 2rem;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.tier-name {
+  font-size: 0.9rem;
+  font-weight: 800;
+  margin-bottom: 2px;
+  position: relative;
+}
+
+.tier-card[data-tier="bronze"] .tier-name { color: var(--bronze); }
+.tier-card[data-tier="silver"] .tier-name { color: var(--silver); }
+.tier-card[data-tier="gold"] .tier-name { color: var(--gold); }
+.tier-card[data-tier="diamond"] .tier-name { color: var(--diamond); }
+
+.tier-price {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  position: relative;
+}
+
+.tier-price strong {
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.tier-tag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0.8;
+}
+
+.tier-card[data-tier="diamond"] .tier-tag { background: rgba(185,242,255,0.15); color: var(--diamond); }
+.tier-card[data-tier="gold"] .tier-tag { background: rgba(255,215,0,0.15); color: var(--gold); }
+
+/* Seed word input */
+.seed-area {
+  margin-bottom: 14px;
+}
+
+.seed-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s;
+}
+
+.seed-input::placeholder { color: var(--text-muted); font-family: var(--font); }
+.seed-input:focus { border-color: var(--accent); box-shadow: 0 0 20px var(--accent-glow); }
+
+.seed-hint {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+  padding-left: 2px;
+}
+
+/* Inscribe button */
+.btn-inscribe {
+  width: 100%;
+  padding: 16px;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+  font-family: var(--font);
+  color: #000;
+  background: linear-gradient(135deg, var(--accent), #a29bfe);
+  box-shadow: 0 4px 24px var(--accent-glow);
+}
+
+.btn-inscribe:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 32px var(--accent-glow);
+}
+
+.btn-inscribe:active { transform: translateY(0); }
+
+.btn-inscribe:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-inscribe .shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+.btn-inscribe[data-tier="bronze"] { background: linear-gradient(135deg, #a0522d, var(--bronze)); }
+.btn-inscribe[data-tier="silver"] { background: linear-gradient(135deg, #808080, var(--silver)); color: #111; }
+.btn-inscribe[data-tier="gold"] { background: linear-gradient(135deg, #b8860b, var(--gold)); color: #111; }
+.btn-inscribe[data-tier="diamond"] { background: linear-gradient(135deg, #5bc0de, var(--diamond)); color: #111; }
+
+/* ═══════════════════════════════════════════════════════
+   Unboxing Overlay
+   ═══════════════════════════════════════════════════════ */
+.unbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 5, 10, 0.92);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+}
+
+.unbox-overlay.active { display: flex; }
+
+.unbox-container {
+  text-align: center;
+  width: 100%;
+  max-width: 360px;
+  padding: 20px;
+}
+
+/* Phase 1: Box */
+.unbox-box {
+  width: 160px;
+  height: 160px;
+  margin: 0 auto 30px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.unbox-box-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 4.5rem;
+  position: relative;
+  border: 2px solid rgba(255,255,255,0.1);
+  background: var(--bg-card);
+}
+
+.unbox-box-inner[data-tier="bronze"] {
+  border-color: var(--bronze);
+  box-shadow: 0 0 60px var(--bronze-glow), inset 0 0 30px var(--bronze-glow);
+}
+.unbox-box-inner[data-tier="silver"] {
+  border-color: var(--silver);
+  box-shadow: 0 0 60px var(--silver-glow), inset 0 0 30px var(--silver-glow);
+}
+.unbox-box-inner[data-tier="gold"] {
+  border-color: var(--gold);
+  box-shadow: 0 0 60px var(--gold-glow), inset 0 0 30px var(--gold-glow);
+}
+.unbox-box-inner[data-tier="diamond"] {
+  border-color: var(--diamond);
+  box-shadow: 0 0 60px var(--diamond-glow), inset 0 0 30px var(--diamond-glow);
+}
+
+/* Shake animation */
+.unbox-box.shaking .unbox-box-inner {
+  animation: boxShake 0.12s linear infinite;
+}
+
+@keyframes boxShake {
+  0% { transform: translate(0, 0) rotate(0deg); }
+  20% { transform: translate(-3px, -2px) rotate(-2deg); }
+  40% { transform: translate(3px, 1px) rotate(2deg); }
+  60% { transform: translate(-2px, 2px) rotate(-1deg); }
+  80% { transform: translate(2px, -1px) rotate(1deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+/* Crack animation */
+.unbox-box.cracking .unbox-box-inner {
+  animation: boxCrack 0.5s ease-out forwards;
+}
+
+@keyframes boxCrack {
+  0% { transform: scale(1); filter: brightness(1); }
+  30% { transform: scale(1.15); filter: brightness(1.8); }
+  60% { transform: scale(1.05); filter: brightness(2.5); }
+  100% { transform: scale(0.3); filter: brightness(4); opacity: 0; }
+}
+
+/* Light particles during crack */
+.crack-particles {
+  position: absolute;
+  inset: -40px;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.crack-particles.active { opacity: 1; }
+
+.crack-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+  animation: particleBurst 1.5s ease-out forwards;
+}
+
+@keyframes particleBurst {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+}
+
+/* Reveal phase */
+.reveal-card {
+  opacity: 0;
+  transform: translateY(60px) scale(0.9);
+  transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.reveal-card.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Phase indicator text */
+.unbox-phase-text {
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+.unbox-phase-text.visible { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════
+   Result Card
+   ═══════════════════════════════════════════════════════ */
+.result-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(20px);
+  text-align: left;
+}
+
+.result-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg, transparent, var(--accent-glow), transparent, var(--accent-glow), transparent);
+  animation: resultGlow 4s linear infinite;
+  opacity: 0.3;
+}
+
+@keyframes resultGlow {
+  100% { transform: rotate(360deg); }
+}
+
+.result-card-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.result-number {
+  font-size: 1.6rem;
+  font-weight: 900;
+  font-family: var(--font-mono);
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.result-number[data-rarity="Legendary"] { color: var(--gold); text-shadow: 0 0 20px var(--gold-glow); }
+.result-number[data-rarity="Epic"] { color: #a855f7; text-shadow: 0 0 20px rgba(168,85,247,0.4); }
+.result-number[data-rarity="Rare"] { color: #3b82f6; text-shadow: 0 0 20px rgba(59,130,246,0.4); }
+.result-number[data-rarity="Common"] { color: var(--text-secondary); }
+
+.result-element-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.result-element-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.result-element-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.result-element-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.rarity-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 14px;
+}
+
+.rarity-badge[data-rarity="Legendary"] { background: rgba(255,215,0,0.15); color: var(--gold); border: 1px solid rgba(255,215,0,0.3); }
+.rarity-badge[data-rarity="Epic"] { background: rgba(168,85,247,0.15); color: #a855f7; border: 1px solid rgba(168,85,247,0.3); }
+.rarity-badge[data-rarity="Rare"] { background: rgba(59,130,246,0.15); color: #3b82f6; border: 1px solid rgba(59,130,246,0.3); }
+.rarity-badge[data-rarity="Common"] { background: rgba(136,136,160,0.1); color: var(--text-secondary); border: 1px solid rgba(136,136,160,0.2); }
+
+.result-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.result-meta-item {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+}
+
+.result-meta-label {
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+
+.result-meta-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.result-seed {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  word-break: break-all;
+  margin-bottom: 16px;
+  padding: 6px 8px;
+  background: rgba(255,255,255,0.02);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-glass);
+}
+
+/* Name input */
+.name-area {
+  margin-bottom: 14px;
+}
+
+.name-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  font-family: var(--font);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s;
+}
+
+.name-input:focus { border-color: var(--accent); box-shadow: 0 0 16px var(--accent-glow); }
+.name-input::placeholder { color: var(--text-muted); }
+
+.btn-name {
+  margin-top: 8px;
+  padding: 8px 16px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.2s;
+}
+
+.btn-name:hover { background: var(--accent); color: #000; }
+.btn-name:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Share buttons */
+.share-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-share {
+  flex: 1;
+  padding: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-xs);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.btn-share:hover { background: var(--bg-card-hover); }
+.btn-share.telegram { border-color: #0088cc; color: #0088cc; }
+.btn-share.telegram:hover { background: rgba(0,136,204,0.1); }
+.btn-share.twitter { border-color: #1da1f2; color: #1da1f2; }
+.btn-share.twitter:hover { background: rgba(29,161,242,0.1); }
+
+/* Close overlay btn */
+.btn-close-overlay {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-glass);
+  border-radius: 50%;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: all 0.2s;
+  font-family: var(--font);
+}
+
+.btn-close-overlay:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+
+/* Confetti canvas */
+#confetti-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Collection Section
+   ═══════════════════════════════════════════════════════ */
+.collection-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.collection-filters::-webkit-scrollbar { display: none; }
+
+.filter-btn {
+  padding: 6px 12px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border: 1px solid var(--border-glass);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--font);
+  transition: all 0.2s;
+}
+
+.filter-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.filter-btn:hover:not(.active) {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.collection-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.collection-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.collection-card {
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.collection-card:hover { transform: translateY(-2px); }
+
+.collection-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.collection-card-num {
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.collection-card-element {
+  font-size: 1.4rem;
+}
+
+.collection-card-rarity {
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.collection-card-rarity[data-rarity="Legendary"] { background: rgba(255,215,0,0.15); color: var(--gold); }
+.collection-card-rarity[data-rarity="Epic"] { background: rgba(168,85,247,0.15); color: #a855f7; }
+.collection-card-rarity[data-rarity="Rare"] { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.collection-card-rarity[data-rarity="Common"] { background: rgba(136,136,160,0.1); color: var(--text-secondary); }
+
+.collection-card-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.collection-card-luck {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.collection-card-luck strong {
+  color: var(--gold);
+  font-family: var(--font-mono);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Leaderboard Section
+   ═══════════════════════════════════════════════════════ */
+.leaderboard-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  background: rgba(255,255,255,0.02);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  border: 1px solid var(--border-glass);
+}
+
+.lb-tab {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.lb-tab.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+.lb-tab:hover:not(.active) { color: var(--text-primary); }
+
+.leaderboard-list {
+  list-style: none;
+}
+
+.lb-entry {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-glass);
+  transition: background 0.2s;
+}
+
+.lb-entry:last-child { border-bottom: none; }
+.lb-entry:hover { background: rgba(255,255,255,0.02); }
+
+.lb-rank {
+  width: 28px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.lb-entry:nth-child(1) .lb-rank { color: var(--gold); font-size: 0.9rem; }
+.lb-entry:nth-child(2) .lb-rank { color: var(--silver); }
+.lb-entry:nth-child(3) .lb-rank { color: var(--bronze); }
+
+.lb-wallet {
+  flex: 1;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  margin: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-score {
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.lb-empty {
+  text-align: center;
+  padding: 30px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Epoch & Slot Hunting
+   ═══════════════════════════════════════════════════════ */
+.epoch-card {
+  padding: 18px;
+  margin-bottom: 12px;
+}
+
+.epoch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.epoch-name {
+  font-size: 0.9rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--gold), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.epoch-number {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.epoch-progress-bar {
+  height: 6px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.epoch-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--gold));
+  border-radius: 3px;
+  transition: width 0.6s ease-out;
+}
+
+.epoch-stats {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+}
+
+.epoch-stats strong { color: var(--text-primary); font-family: var(--font-mono); }
+
+.slot-milestones {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slot-milestone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.slot-ms-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.slot-ms-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(108, 92, 231, 0.1);
+  border: 1px solid rgba(108, 92, 231, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.slot-ms-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.slot-ms-slot {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.slot-ms-countdown {
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Live Feed
+   ═══════════════════════════════════════════════════════ */
+.live-feed-card {
+  padding: 14px;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.live-feed-card::-webkit-scrollbar { width: 4px; }
+.live-feed-card::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.live-feed-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: livePulse 2s ease-in-out infinite;
+}
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,230,118,0.4); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(0,230,118,0); }
+}
+
+.live-feed-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.live-feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.feed-item {
+  padding: 8px 10px;
+  font-size: 0.72rem;
+  border-radius: var(--radius-xs);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid transparent;
+  animation: feedSlideIn 0.4s ease-out;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+@keyframes feedSlideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.feed-item .feed-wallet {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.feed-item .feed-number {
+  font-family: var(--font-mono);
+  font-weight: 800;
+}
+
+.feed-item[data-rarity="Legendary"] { border-color: rgba(255,215,0,0.2); background: rgba(255,215,0,0.03); }
+.feed-item[data-rarity="Epic"] { border-color: rgba(168,85,247,0.2); background: rgba(168,85,247,0.03); }
+.feed-item[data-rarity="Rare"] { border-color: rgba(59,130,246,0.2); background: rgba(59,130,246,0.03); }
+
+.feed-empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Bottom Nav
+   ═══════════════════════════════════════════════════════ */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(10, 10, 15, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border-glass);
+  padding: 6px 0 calc(6px + env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-nav-inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  display: flex;
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-family: var(--font);
+  border: none;
+  background: none;
+  transition: color 0.2s;
+}
+
+.nav-item.active { color: var(--accent); }
+.nav-item:hover { color: var(--text-primary); }
+.nav-item-icon { font-size: 1.2rem; line-height: 1; }
+
+/* ═══════════════════════════════════════════════════════
+   Views (tab switching)
+   ═══════════════════════════════════════════════════════ */
+.view { display: none; }
+.view.active { display: block; }
+
+/* ═══════════════════════════════════════════════════════
+   Utility & Animations
+   ═══════════════════════════════════════════════════════ */
+.text-center { text-align: center; }
+.mt-2 { margin-top: 8px; }
+.mt-4 { margin-top: 16px; }
+.mb-2 { margin-bottom: 8px; }
+
+.loading-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.1);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { 100% { transform: rotate(360deg); } }
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-100px);
+  z-index: 99999;
+  padding: 12px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: var(--font);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  max-width: 90%;
+  text-align: center;
+}
+
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.success { background: rgba(0,230,118,0.15); border: 1px solid rgba(0,230,118,0.3); color: var(--success); }
+.toast.error { background: rgba(255,71,87,0.15); border: 1px solid rgba(255,71,87,0.3); color: var(--danger); }
+.toast.info { background: rgba(108,92,231,0.15); border: 1px solid rgba(108,92,231,0.3); color: var(--accent); }
+
+/* Responsive */
+@media (max-width: 360px) {
+  html { font-size: 14px; }
+  .tier-grid { gap: 8px; }
+  .tier-icon { font-size: 1.6rem; }
+}
+
+/* Scanline overlay for aesthetic */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+</style>
+</head>
+<body>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- Confetti Canvas -->
+<canvas id="confetti-canvas"></canvas>
+
+<!-- ═══════════════════════════════════════════════════════
+     Unboxing Overlay
+     ═══════════════════════════════════════════════════════ -->
+<div id="unbox-overlay" class="unbox-overlay">
+  <button class="btn-close-overlay" id="btn-close-unbox" style="display:none;">&times;</button>
+  <div class="unbox-container">
+    <div id="unbox-phase-text" class="unbox-phase-text"></div>
+    <div id="unbox-box" class="unbox-box">
+      <div id="unbox-box-inner" class="unbox-box-inner"></div>
+      <div id="crack-particles" class="crack-particles"></div>
+    </div>
+    <!-- Result Card (hidden until reveal) -->
+    <div id="reveal-card" class="reveal-card">
+      <div class="result-card">
+        <div class="result-card-inner" id="result-content"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     Main App
+     ═══════════════════════════════════════════════════════ -->
+<div class="app">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-brand">
+      <div class="header-logo">6</div>
+      <div>
+        <div class="header-title">InscriptionForge</div>
+        <div class="header-subtitle">123456btc Agent Minting</div>
+      </div>
+    </div>
+    <div class="wallet-area">
+      <div id="bbt-balance" class="bbt-balance">
+        <span class="bbt-icon">BBT</span>
+        <span id="bbt-amount">0</span>
+      </div>
+      <button id="btn-wallet" class="btn-wallet" onclick="handleWallet()">Connect</button>
+    </div>
+  </header>
+
+  <!-- ═══════ FORGE VIEW ═══════ -->
+  <div id="view-forge" class="view active">
+    <section>
+      <div class="section-title">Select Tier</div>
+      <div class="tier-grid">
+        <div class="tier-card glass" data-tier="bronze" onclick="selectTier('bronze')">
+          <div class="tier-icon">&#x1F7EB;</div>
+          <div class="tier-name">Bronze</div>
+          <div class="tier-price"><strong>21</strong> BBT</div>
+        </div>
+        <div class="tier-card glass" data-tier="silver" onclick="selectTier('silver')">
+          <div class="tier-icon">&#x2B1C;</div>
+          <div class="tier-name">Silver</div>
+          <div class="tier-price"><strong>2,100</strong> BBT</div>
+        </div>
+        <div class="tier-card glass" data-tier="gold" onclick="selectTier('gold')">
+          <div class="tier-icon">&#x1F7E1;</div>
+          <div class="tier-name">Gold</div>
+          <div class="tier-price"><strong>21,000</strong> BBT</div>
+          <span class="tier-tag">Popular</span>
+        </div>
+        <div class="tier-card glass" data-tier="diamond" onclick="selectTier('diamond')">
+          <div class="tier-icon">&#x1F48E;</div>
+          <div class="tier-name">Diamond</div>
+          <div class="tier-price"><strong>210,000</strong> BBT</div>
+          <span class="tier-tag">Whale</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="seed-area">
+        <input id="seed-input" class="seed-input glass" type="text" placeholder="Seed word (optional)" maxlength="64" autocomplete="off" spellcheck="false">
+        <div class="seed-hint">Hashed into the inscription's provenance. Does not change probability.</div>
+      </div>
+      <button id="btn-inscribe" class="btn-inscribe" disabled onclick="doInscribe()">
+        <span class="shimmer"></span>
+        <span id="btn-inscribe-text">Select a Tier</span>
+      </button>
+    </section>
+  </div>
+
+  <!-- ═══════ COLLECTION VIEW ═══════ -->
+  <div id="view-collection" class="view">
+    <section>
+      <div class="section-title">My Collection</div>
+      <div id="collection-filters" class="collection-filters">
+        <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+        <button class="filter-btn" data-filter="element" onclick="setFilter('Fire')">Fire</button>
+        <button class="filter-btn" data-filter="element" onclick="setFilter('Water')">Water</button>
+        <button class="filter-btn" data-filter="element" onclick="setFilter('Earth')">Earth</button>
+        <button class="filter-btn" data-filter="element" onclick="setFilter('Metal')">Metal</button>
+        <button class="filter-btn" data-filter="element" onclick="setFilter('Wood')">Wood</button>
+        <button class="filter-btn" data-filter="rarity" onclick="setFilter('Legendary')">Legendary</button>
+        <button class="filter-btn" data-filter="rarity" onclick="setFilter('Epic')">Epic</button>
+        <button class="filter-btn" data-filter="rarity" onclick="setFilter('Rare')">Rare</button>
+      </div>
+      <div id="collection-grid" class="collection-grid">
+        <div class="collection-empty">Connect wallet to view your inscriptions</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══════ LEADERBOARD VIEW ═══════ -->
+  <div id="view-leaderboard" class="view">
+    <section>
+      <div class="section-title">Leaderboard</div>
+      <div class="leaderboard-tabs">
+        <button class="lb-tab active" data-type="luckiest" onclick="setLBTab('luckiest')">Luckiest</button>
+        <button class="lb-tab" data-type="whale" onclick="setLBTab('whale')">Whale</button>
+        <button class="lb-tab" data-type="opened" onclick="setLBTab('opened')">Opened</button>
+        <button class="lb-tab" data-type="jackpot" onclick="setLBTab('jackpot')">Jackpot</button>
+      </div>
+      <div class="glass" style="border-radius:var(--radius);">
+        <ul id="leaderboard-list" class="leaderboard-list">
+          <li class="lb-empty">Loading leaderboard...</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Epoch & Slot Hunting -->
+    <section>
+      <div class="section-title">Epoch & Slot Hunting</div>
+      <div id="epoch-card" class="epoch-card glass">
+        <div class="epoch-header">
+          <div class="epoch-name" id="epoch-name">Genesis</div>
+          <div class="epoch-number" id="epoch-number">Epoch #1</div>
+        </div>
+        <div class="epoch-progress-bar">
+          <div class="epoch-progress-fill" id="epoch-progress" style="width:0%"></div>
+        </div>
+        <div class="epoch-stats">
+          <span><strong id="epoch-filled">0</strong> filled</span>
+          <span><strong id="epoch-remaining">2,100</strong> remaining</span>
+          <span><strong id="epoch-progress-pct">0%</strong></span>
+        </div>
+      </div>
+      <div id="slot-milestones" class="slot-milestones"></div>
+    </section>
+  </div>
+
+  <!-- ═══════ LIVE FEED VIEW ═══════ -->
+  <div id="view-live" class="view">
+    <section>
+      <div class="section-title">Live Feed</div>
+      <div class="live-feed-card glass" style="border-radius:var(--radius);">
+        <div class="live-feed-header">
+          <div class="live-dot" id="ws-dot"></div>
+          <span class="live-feed-title" id="ws-status">Connecting...</span>
+        </div>
+        <div id="live-feed-list" class="live-feed-list">
+          <div class="feed-empty">Waiting for inscriptions...</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+</div><!-- /app -->
+
+<!-- Bottom Navigation -->
+<nav class="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="nav-item active" data-view="forge" onclick="switchView('forge')">
+      <span class="nav-item-icon">&#x1F528;</span>
+      Forge
+    </button>
+    <button class="nav-item" data-view="collection" onclick="switchView('collection')">
+      <span class="nav-item-icon">&#x1F4E6;</span>
+      Collection
+    </button>
+    <button class="nav-item" data-view="leaderboard" onclick="switchView('leaderboard')">
+      <span class="nav-item-icon">&#x1F3C6;</span>
+      Board
+    </button>
+    <button class="nav-item" data-view="live" onclick="switchView('live')">
+      <span class="nav-item-icon">&#x26A1;</span>
+      Live
+    </button>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════
+     JavaScript
+     ═══════════════════════════════════════════════════════ -->
+<script>
+(function() {
+'use strict';
+
+/* ─── Constants ─── */
+const API_BASE = location.origin;
+const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+const ELEMENTS = ['Void','Fire','Water','Earth','Metal','Wood','Thunder','Wind','Mountain','Crystal'];
+const ELEMENT_EMOJI = { Void:'&#x1F573;', Fire:'&#x1F525;', Water:'&#x1F4A7;', Earth:'&#x1F30D;', Metal:'&#x2699;', Wood:'&#x1F333;', Thunder:'&#x26A1;', Wind:'&#x1F32C;', Mountain:'&#x26F0;', Crystal:'&#x1F48E;' };
+const RARITY_COLORS = { Legendary:'#ffd700', Epic:'#a855f7', Rare:'#3b82f6', Common:'#8888a0' };
+const TIER_ICONS = { bronze:'&#x1F7EB;', silver:'&#x2B1C;', gold:'&#x1F7E1;', diamond:'&#x1F48E;' };
+
+/* ─── State ─── */
+let wallet = localStorage.getItem('forge_wallet') || '';
+let selectedTier = null;
+let currentCollection = [];
+let currentFilter = 'all';
+let wsConnection = null;
+let feedItems = [];
+
+/* ─── DOM refs ─── */
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+/* ─── Initialize ─── */
+async function init() {
+  // Auto-reconnect if wallet was previously connected
+  if (wallet) {
+    const stored = JSON.parse(localStorage.getItem('forge_wallet_sig') || '{}');
+    if (stored.sig) {
+      walletSignature = stored.sig;
+      walletPublicKey = wallet;
+      updateWalletUI(true);
+      loadCollection();
+      // Also try to re-verify with the browser wallet
+      const provider = getWalletProvider();
+      if (provider) {
+        try {
+          const resp = await provider.connect({ onlyIfTrusted: true });
+          const pubkey = resp.publicKey?.toString() || provider.publicKey?.toString();
+          if (pubkey && pubkey !== wallet) {
+            // Wallet changed, reconnect
+            wallet = pubkey;
+            walletPublicKey = pubkey;
+            localStorage.setItem('forge_wallet', wallet);
+            updateWalletUI(true);
+            loadCollection();
+          }
+        } catch (e) { /* not auto-approved, that's fine */ }
+      }
+    } else {
+      updateWalletUI(true);
+      loadCollection();
+    }
+  }
+  selectTier(null);
+  loadEpoch();
+  loadSlotHunting();
+  loadLeaderboard('luckiest');
+  connectWS();
+}
+
+/* ═══════════════════════════════════════════════════════
+   Wallet — Phantom / Solflare / Mobile Wallet Adapter
+   ═══════════════════════════════════════════════════════ */
+let walletPublicKey = null;
+let walletSignature = null;
+
+const WALLET_LIST = [
+  { name: 'Phantom',   icon: '👻', key: 'phantom',      check: () => window.phantom?.solana?.isPhantom,   get: () => window.phantom.solana,      url: 'https://phantom.app/' },
+  { name: 'OKX',       icon: '⭕', key: 'okx',          check: () => window.okxwallet?.solana,             get: () => window.okxwallet.solana,    url: 'https://www.okx.com/web3' },
+  { name: 'Bitget',    icon: '🟣', key: 'bitget',       check: () => window.bitkeep?.solana || window.bitgetWallet?.solana, get: () => window.bitkeep?.solana || window.bitgetWallet?.solana, url: 'https://web3.bitget.com/' },
+  { name: 'Binance',   icon: '🟡', key: 'binance',      check: () => window.BinanceChain || window.binancew3w, get: () => window.BinanceChain?.solana || window.binancew3w?.solana || window.BinanceChain, url: 'https://www.binance.com/web3wallet' },
+  { name: 'Solflare',  icon: '☀️', key: 'solflare',     check: () => window.solflare?.isSolflare,          get: () => window.solflare,            url: 'https://solflare.com/' },
+  { name: 'Backpack',  icon: '🎒', key: 'backpack',     check: () => window.backpack?.solana,              get: () => window.backpack.solana,     url: 'https://backpack.app/' },
+];
+
+function getWalletProvider() {
+  for (const w of WALLET_LIST) {
+    if (w.check()) return w.get();
+  }
+  // Legacy fallback
+  if (window.solana?.isPhantom) return window.solana;
+  return null;
+}
+
+function getDetectedWallets() {
+  return WALLET_LIST.filter(w => w.check());
+}
+
+window.handleWallet = async function() {
+  if (wallet) {
+    // Disconnect
+    const provider = getWalletProvider();
+    if (provider?.disconnect) await provider.disconnect();
+    wallet = '';
+    walletPublicKey = null;
+    walletSignature = null;
+    localStorage.removeItem('forge_wallet');
+    localStorage.removeItem('forge_wallet_sig');
+    updateWalletUI(false);
+    currentCollection = [];
+    renderCollection();
+    toast('Wallet disconnected', 'info');
+    return;
+  }
+
+  const provider = getWalletProvider();
+
+  if (!provider) {
+    // No wallet detected — show install guidance
+    showWalletModal();
+    return;
+  }
+
+  try {
+    // Step 1: Connect
+    const resp = await provider.connect();
+    const pubkey = resp.publicKey?.toString() || provider.publicKey?.toString();
+    if (!pubkey) throw new Error('Failed to get public key');
+
+    // Step 2: Sign a message for auth
+    const timestamp = Date.now().toString();
+    const message = new TextEncoder().encode(
+      `123456btc InscriptionForge Auth\nWallet: ${pubkey}\nTimestamp: ${timestamp}`
+    );
+
+    let sigBytes;
+    try {
+      sigBytes = await provider.signMessage(message, 'utf8');
+    } catch (e) {
+      // Some wallets need different encoding
+      sigBytes = await provider.signMessage(message);
+    }
+
+    // Convert signature to hex
+    const sigArray = sigBytes.signature || sigBytes;
+    const sigHex = Array.from(sigArray instanceof Uint8Array ? sigArray : new Uint8Array(sigArray))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+
+    wallet = pubkey;
+    walletPublicKey = pubkey;
+    walletSignature = sigHex;
+    localStorage.setItem('forge_wallet', wallet);
+    localStorage.setItem('forge_wallet_sig', JSON.stringify({ sig: sigHex, ts: timestamp }));
+    updateWalletUI(true);
+    loadCollection();
+    toast('Wallet connected', 'success');
+  } catch (err) {
+    if (err.code === 4001) {
+      toast('Connection rejected', 'info');
+    } else {
+      toast('Connection failed: ' + (err.message || 'Unknown error'), 'error');
+    }
+  }
+};
+
+function showWalletModal() {
+  const detected = getDetectedWallets();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay active';
+
+  // If wallets are detected but connect() failed, show them as clickable
+  // If none detected, show install links
+  const detectedBtns = detected.map(w =>
+    `<button onclick="connectSpecificWallet('${w.key}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:14px 16px;border-radius:12px;border:1px solid var(--border-glass);background:var(--bg-card-hover);cursor:pointer;margin-bottom:8px;transition:all 0.2s">
+      <span style="font-size:1.4rem">${w.icon}</span>
+      <span style="font-weight:700;color:var(--text-primary);font-size:0.95rem">${w.name}</span>
+      <span style="margin-left:auto;font-size:0.7rem;color:var(--success)">Detected</span>
+    </button>`
+  ).join('');
+
+  const installBtns = WALLET_LIST.filter(w => !w.check()).map(w =>
+    `<a href="${w.url}" target="_blank" rel="noopener"
+       style="display:flex;align-items:center;gap:10px;width:100%;padding:14px 16px;border-radius:12px;border:1px solid var(--border-glass);background:var(--bg-card);text-decoration:none;margin-bottom:8px;transition:all 0.2s">
+      <span style="font-size:1.4rem">${w.icon}</span>
+      <span style="font-weight:600;color:var(--text-secondary);font-size:0.95rem">${w.name}</span>
+      <span style="margin-left:auto;font-size:0.7rem;color:var(--accent)">Install</span>
+    </a>`
+  ).join('');
+
+  overlay.innerHTML = `
+    <div class="modal glass" style="max-width:380px">
+      <div style="font-size:1.2rem;font-weight:800;margin-bottom:16px;text-align:center">Connect Wallet</div>
+      ${detected.length > 0 ? `
+        <div style="margin-bottom:16px">
+          <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Detected</div>
+          ${detectedBtns}
+        </div>
+      ` : ''}
+      <div>
+        <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">
+          ${detected.length > 0 ? 'Other Wallets' : 'Install a Wallet'}
+        </div>
+        ${installBtns}
+      </div>
+      <div style="text-align:center;margin-top:12px">
+        <button onclick="this.closest('.modal-overlay').remove()"
+                style="padding:8px 20px;border-radius:8px;border:1px solid var(--border-glass);background:transparent;color:var(--text-secondary);cursor:pointer;font-size:0.8rem">
+          Cancel
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+window.connectSpecificWallet = async function(key) {
+  const w = WALLET_LIST.find(w => w.key === key);
+  if (!w || !w.check()) { toast('Wallet not found', 'error'); return; }
+  // Close modal
+  document.querySelector('.modal-overlay')?.remove();
+  // Connect
+  const provider = w.get();
+  try {
+    const resp = await provider.connect();
+    const pubkey = resp.publicKey?.toString() || provider.publicKey?.toString();
+    if (!pubkey) throw new Error('Failed to get public key');
+
+    const timestamp = Date.now().toString();
+    const message = new TextEncoder().encode(
+      `123456btc InscriptionForge Auth\nWallet: ${pubkey}\nTimestamp: ${timestamp}`
+    );
+
+    let sigBytes;
+    try { sigBytes = await provider.signMessage(message, 'utf8'); }
+    catch (e) { sigBytes = await provider.signMessage(message); }
+
+    const sigArray = sigBytes.signature || sigBytes;
+    const sigHex = Array.from(sigArray instanceof Uint8Array ? sigArray : new Uint8Array(sigArray))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+
+    wallet = pubkey;
+    walletPublicKey = pubkey;
+    walletSignature = sigHex;
+    localStorage.setItem('forge_wallet', wallet);
+    localStorage.setItem('forge_wallet_sig', JSON.stringify({ sig: sigHex, ts: timestamp }));
+    updateWalletUI(true);
+    loadCollection();
+    toast(`${w.name} connected`, 'success');
+  } catch (err) {
+    if (err.code === 4001) toast('Connection rejected', 'info');
+    else toast('Connection failed: ' + (err.message || 'Unknown'), 'error');
+  }
+};
+
+function updateWalletUI(connected) {
+  const btn = $('#btn-wallet');
+  if (connected) {
+    btn.textContent = wallet.slice(0, 4) + '..' + wallet.slice(-4);
+    btn.classList.add('connected');
+    $('#bbt-balance').classList.add('show');
+  } else {
+    btn.textContent = 'Connect';
+    btn.classList.remove('connected');
+    $('#bbt-balance').classList.remove('show');
+  }
+}
+
+// Build auth headers for API calls
+function getAuthHeaders() {
+  const timestamp = Date.now().toString();
+  const stored = JSON.parse(localStorage.getItem('forge_wallet_sig') || '{}');
+  return {
+    'Content-Type': 'application/json',
+    'x-wallet': wallet,
+    'x-wallet-signature': stored.sig || wallet,
+    'x-wallet-timestamp': stored.ts || timestamp,
+  };
+}
+
+/* ═══════════════════════════════════════════════════════
+   Navigation
+   ═══════════════════════════════════════════════════════ */
+window.switchView = function(view) {
+  $$('.view').forEach(v => v.classList.remove('active'));
+  $$('.nav-item').forEach(n => n.classList.remove('active'));
+  $(`#view-${view}`).classList.add('active');
+  $$(`.nav-item[data-view="${view}"]`).forEach(n => n.classList.add('active'));
+
+  if (view === 'collection' && wallet) loadCollection();
+  if (view === 'leaderboard') {
+    loadLeaderboard('luckiest');
+    loadEpoch();
+    loadSlotHunting();
+  }
+};
+
+/* ═══════════════════════════════════════════════════════
+   Tier Selection
+   ═══════════════════════════════════════════════════════ */
+window.selectTier = function(tier) {
+  selectedTier = tier;
+  $$('.tier-card').forEach(c => {
+    c.classList.toggle('selected', c.dataset.tier === tier);
+  });
+  const btn = $('#btn-inscribe');
+  const btnText = $('#btn-inscribe-text');
+  if (tier) {
+    btn.disabled = false;
+    btn.setAttribute('data-tier', tier);
+    const prices = { bronze:'21 BBT', silver:'2,100 BBT', gold:'21,000 BBT', diamond:'210,000 BBT' };
+    btnText.textContent = `INSCRIBE \u2014 ${prices[tier]}`;
+  } else {
+    btn.disabled = true;
+    btn.removeAttribute('data-tier');
+    btnText.textContent = 'Select a Tier';
+  }
+};
+
+/* ═══════════════════════════════════════════════════════
+   Inscription API
+   ═══════════════════════════════════════════════════════ */
+window.doInscribe = async function() {
+  if (!wallet) {
+    toast('Connect your wallet first', 'error');
+    return;
+  }
+  if (!selectedTier) {
+    toast('Select a tier first', 'error');
+    return;
+  }
+
+  const btn = $('#btn-inscribe');
+  const btnText = $('#btn-inscribe-text');
+  btn.disabled = true;
+  btnText.innerHTML = '<span class="loading-spinner"></span>';
+
+  const seedWord = $('#seed-input').value.trim() || undefined;
+
+  try {
+    const res = await fetch(`${API_BASE}/inscribe`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ tier: selectedTier, seedWord }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || 'Inscription failed');
+    }
+
+    // Success! Start unboxing animation
+    const inscription = data.inscription;
+    playUnboxAnimation(inscription);
+
+    // Reset form
+    $('#seed-input').value = '';
+
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    const prices = { bronze:'21 BBT', silver:'2,100 BBT', gold:'21,000 BBT', diamond:'210,000 BBT' };
+    btnText.textContent = selectedTier ? `INSCRIBE \u2014 ${prices[selectedTier]}` : 'Select a Tier';
+  }
+};
+
+/* ═══════════════════════════════════════════════════════
+   Unboxing Animation (3 phases)
+   ═══════════════════════════════════════════════════════ */
+function playUnboxAnimation(inscription) {
+  const overlay = $('#unbox-overlay');
+  const box = $('#unbox-box');
+  const boxInner = $('#unbox-box-inner');
+  const phaseText = $('#unbox-phase-text');
+  const particles = $('#crack-particles');
+  const revealCard = $('#reveal-card');
+  const closeBtn = $('#btn-close-unbox');
+
+  // Reset
+  overlay.classList.add('active');
+  box.classList.remove('shaking', 'cracking');
+  particles.classList.remove('active');
+  particles.innerHTML = '';
+  revealCard.classList.remove('visible');
+  revealCard.style.display = 'none';
+  closeBtn.style.display = 'none';
+
+  // Set tier icon on box
+  boxInner.setAttribute('data-tier', inscription.tier);
+  boxInner.innerHTML = TIER_ICONS[inscription.tier] || '&#x1F4E6;';
+
+  // ── Phase 1: Shake (1.5s) ──
+  phaseText.textContent = 'Channeling energy...';
+  phaseText.classList.add('visible');
+  box.classList.add('shaking');
+  playTone(120, 1.5, 'sine', 0.15);
+
+  // Vibration pattern
+  if (navigator.vibrate) {
+    navigator.vibrate([100, 50, 100, 50, 100, 50, 100, 50, 100, 50, 200, 100, 300]);
+  }
+
+  setTimeout(() => {
+    // ── Phase 2: Crack (2.0s) ──
+    phaseText.textContent = 'Breaking the seal...';
+    box.classList.remove('shaking');
+    box.classList.add('cracking');
+    spawnCrackParticles(particles, inscription.tier);
+    playRisingTone(200, 800, 2.0);
+
+    setTimeout(() => {
+      // ── Phase 3: Reveal (3.0s) ──
+      phaseText.textContent = `${getElementEmoji(inscription.attributes.element)} ${inscription.attributes.rarity}!`;
+      box.style.display = 'none';
+      particles.classList.remove('active');
+
+      // Build result card
+      buildResultCard(inscription);
+
+      revealCard.style.display = 'block';
+      requestAnimationFrame(() => {
+        revealCard.classList.add('visible');
+      });
+
+      // Confetti!
+      launchConfetti(inscription.tier);
+
+      // Rarity sound
+      if (inscription.attributes.rarity === 'Legendary') {
+        playLegendaryFanfare();
+      } else if (inscription.attributes.rarity === 'Epic') {
+        playTone(523, 0.3, 'sine', 0.2);
+        setTimeout(() => playTone(659, 0.3, 'sine', 0.2), 150);
+        setTimeout(() => playTone(784, 0.5, 'sine', 0.2), 300);
+      } else {
+        playTone(523, 0.4, 'sine', 0.15);
+      }
+
+      // Show close button
+      setTimeout(() => {
+        closeBtn.style.display = 'flex';
+        // Refresh collection in background
+        if (wallet) loadCollection();
+      }, 1500);
+
+    }, 2000);
+  }, 1500);
+
+  // Close handler
+  closeBtn.onclick = () => {
+    overlay.classList.remove('active');
+    box.style.display = '';
+  };
+}
+
+function spawnCrackParticles(container, tier) {
+  container.innerHTML = '';
+  container.classList.add('active');
+  const colors = {
+    bronze: ['#cd7f32','#daa520','#b8860b'],
+    silver: ['#c0c0c0','#e0e0e0','#a0a0a0'],
+    gold: ['#ffd700','#ffed4a','#daa520'],
+    diamond: ['#b9f2ff','#e0f7ff','#87ceeb'],
+  };
+  const tierColors = colors[tier] || colors.bronze;
+
+  for (let i = 0; i < 30; i++) {
+    const p = document.createElement('div');
+    p.className = 'crack-particle';
+    const angle = (Math.PI * 2 * i) / 30;
+    const dist = 40 + Math.random() * 80;
+    p.style.setProperty('--tx', Math.cos(angle) * dist + 'px');
+    p.style.setProperty('--ty', Math.sin(angle) * dist + 'px');
+    p.style.left = '50%';
+    p.style.top = '50%';
+    p.style.background = tierColors[Math.floor(Math.random() * tierColors.length)];
+    p.style.width = (3 + Math.random() * 5) + 'px';
+    p.style.height = p.style.width;
+    p.style.animationDelay = (Math.random() * 0.3) + 's';
+    container.appendChild(p);
+  }
+}
+
+function buildResultCard(inscription) {
+  const attr = inscription.attributes;
+  const elEmoji = getElementEmoji(attr.element);
+
+  let seedHashHtml = '';
+  if (inscription.seedWordHash) {
+    seedHashHtml = `<div class="result-seed">seed: ${inscription.seedWordHash.slice(0, 24)}...</div>`;
+  }
+
+  $('#result-content').innerHTML = `
+    <div class="result-number" data-rarity="${attr.rarity}">#${String(inscription.inscriptionNumber).padStart(4, '0')}</div>
+    <div class="result-element-row">
+      <span class="result-element-icon">${elEmoji}</span>
+      <div>
+        <div class="result-element-name">${attr.element}</div>
+        <div class="result-element-label">Element</div>
+      </div>
+    </div>
+    <span class="rarity-badge" data-rarity="${attr.rarity}">${attr.rarity}</span>
+    <div class="result-meta">
+      <div class="result-meta-item">
+        <div class="result-meta-label">Trait</div>
+        <div class="result-meta-value">${attr.trait}</div>
+      </div>
+      <div class="result-meta-item">
+        <div class="result-meta-label">Series</div>
+        <div class="result-meta-value">#${attr.series}</div>
+      </div>
+      <div class="result-meta-item">
+        <div class="result-meta-label">Epoch</div>
+        <div class="result-meta-value">${inscription.epoch}</div>
+      </div>
+      <div class="result-meta-item">
+        <div class="result-meta-label">Slot</div>
+        <div class="result-meta-value">${inscription.slot}</div>
+      </div>
+      <div class="result-meta-item">
+        <div class="result-meta-label">Tier</div>
+        <div class="result-meta-value" style="text-transform:capitalize">${inscription.tier}</div>
+      </div>
+      <div class="result-meta-item">
+        <div class="result-meta-label">Cost</div>
+        <div class="result-meta-value">${inscription.costBbt.toLocaleString()} BBT</div>
+      </div>
+    </div>
+    ${seedHashHtml}
+    <div class="name-area">
+      <input id="result-name-input" class="name-input" type="text" placeholder="Name your Agent ID..." maxlength="64" autocomplete="off">
+      <button class="btn-name" id="btn-name-agent" onclick="nameAgent('${inscription.id}')">Name Agent</button>
+    </div>
+    <div class="share-row">
+      <button class="btn-share telegram" onclick="shareTelegram(${inscription.inscriptionNumber}, '${attr.element}', '${attr.rarity}')">&#x1F4AC; Telegram</button>
+      <button class="btn-share twitter" onclick="shareTwitter(${inscription.inscriptionNumber}, '${attr.element}', '${attr.rarity}')">&#x1D54F; Share to X</button>
+    </div>
+  `;
+}
+
+/* ─── Name Agent ─── */
+window.nameAgent = async function(inscriptionId) {
+  if (!wallet) { toast('Connect wallet first', 'error'); return; }
+  const nameInput = $('#result-name-input');
+  const name = nameInput.value.trim();
+  if (!name) { toast('Enter a name', 'error'); return; }
+
+  const btn = $('#btn-name-agent');
+  btn.disabled = true;
+  btn.textContent = 'Naming...';
+
+  try {
+    const res = await fetch(`${API_BASE}/inscribe/${inscriptionId}/name`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to name');
+
+    toast(`Agent named: ${name}`, 'success');
+    btn.textContent = 'Named!';
+    nameInput.disabled = true;
+    btn.disabled = true;
+  } catch (err) {
+    toast(err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Name Agent';
+  }
+};
+
+/* ─── Share ─── */
+window.shareTelegram = function(num, element, rarity) {
+  const text = encodeURIComponent(`I just inscribed Agent #${String(num).padStart(4,'0')} \u2014 ${rarity} ${element}! \n\nMint yours at 123456btc InscriptionForge \uD83D\uDD28\n`);
+  window.open(`https://t.me/share/url?url=${encodeURIComponent(location.href)}&text=${text}`, '_blank');
+};
+
+window.shareTwitter = function(num, element, rarity) {
+  const text = encodeURIComponent(`Just forged Agent #${String(num).padStart(4,'0')} \u2014 ${rarity} ${element} on @123456btc InscriptionForge \uD83D\uDD28\n\nMint your Agent ID now!`);
+  window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
+};
+
+/* ═══════════════════════════════════════════════════════
+   Web Audio API
+   ═══════════════════════════════════════════════════════ */
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playTone(freq, duration, type, volume) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume || 0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+  } catch(e) { /* audio not available */ }
+}
+
+function playRisingTone(startFreq, endFreq, duration) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(startFreq, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, ctx.currentTime + duration);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+  } catch(e) {}
+}
+
+function playLegendaryFanfare() {
+  const notes = [523, 659, 784, 1047];
+  notes.forEach((freq, i) => {
+    setTimeout(() => playTone(freq, 0.4, 'sine', 0.2), i * 150);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   Confetti (Canvas)
+   ═══════════════════════════════════════════════════════ */
+function launchConfetti(tier) {
+  const canvas = $('#confetti-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  const tierColors = {
+    bronze: ['#cd7f32','#daa520','#b8860b','#e8a848'],
+    silver: ['#c0c0c0','#e0e0e0','#a0a0a0','#d4d4d4'],
+    gold: ['#ffd700','#ffed4a','#daa520','#ffe066'],
+    diamond: ['#b9f2ff','#e0f7ff','#87ceeb','#a0e7ff'],
+  };
+  const colors = tierColors[tier] || tierColors.bronze;
+
+  const particles = [];
+  const count = 120;
+
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: canvas.width / 2 + (Math.random() - 0.5) * 100,
+      y: canvas.height / 2,
+      vx: (Math.random() - 0.5) * 16,
+      vy: -Math.random() * 18 - 4,
+      w: 4 + Math.random() * 6,
+      h: 3 + Math.random() * 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rotation: Math.random() * 360,
+      rotationSpeed: (Math.random() - 0.5) * 12,
+      gravity: 0.25 + Math.random() * 0.15,
+      opacity: 1,
+      decay: 0.005 + Math.random() * 0.005,
+    });
+  }
+
+  let frame = 0;
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+
+    for (const p of particles) {
+      p.x += p.vx;
+      p.vy += p.gravity;
+      p.y += p.vy;
+      p.rotation += p.rotationSpeed;
+      p.opacity -= p.decay;
+      p.vx *= 0.99;
+
+      if (p.opacity <= 0) continue;
+      alive = true;
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.globalAlpha = p.opacity;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+
+    frame++;
+    if (alive && frame < 200) {
+      requestAnimationFrame(animate);
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  requestAnimationFrame(animate);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Collection
+   ═══════════════════════════════════════════════════════ */
+async function loadCollection() {
+  if (!wallet) return;
+  try {
+    const res = await fetch(`${API_BASE}/collection/${encodeURIComponent(wallet)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    currentCollection = data.inscriptions || [];
+    renderCollection();
+  } catch(e) {
+    console.warn('Failed to load collection:', e);
+  }
+}
+
+window.setFilter = function(filter) {
+  currentFilter = filter;
+  $$('.filter-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === filter || (filter === 'all' && b.dataset.filter === 'all'));
+  });
+  renderCollection();
+};
+
+function renderCollection() {
+  const grid = $('#collection-grid');
+  if (!wallet || currentCollection.length === 0) {
+    grid.innerHTML = '<div class="collection-empty">' + (wallet ? 'No inscriptions yet. Forge your first Agent!' : 'Connect wallet to view your inscriptions') + '</div>';
+    return;
+  }
+
+  let filtered = currentCollection;
+  if (currentFilter !== 'all') {
+    filtered = currentCollection.filter(ins => {
+      return ins.attributes.element === currentFilter || ins.attributes.rarity === currentFilter;
+    });
+  }
+
+  if (filtered.length === 0) {
+    grid.innerHTML = '<div class="collection-empty">No inscriptions match this filter</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map(ins => {
+    const attr = ins.attributes;
+    const elEmoji = getElementEmoji(attr.element);
+    const luckScore = ins._luckScore || '';
+    const nameHtml = ins.name ? `<div class="collection-card-name">${escapeHtml(ins.name)}</div>` : '';
+    return `
+      <div class="collection-card glass" onclick="showInscriptionDetail('${ins.id}')">
+        <div class="collection-card-head">
+          <span class="collection-card-num">#${String(ins.inscriptionNumber).padStart(4, '0')}</span>
+          <span class="collection-card-element">${elEmoji}</span>
+        </div>
+        <span class="collection-card-rarity" data-rarity="${attr.rarity}">${attr.rarity}</span>
+        ${nameHtml}
+        <div class="collection-card-luck">Trait: ${attr.trait} | Series #${attr.series}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.showInscriptionDetail = function(id) {
+  const ins = currentCollection.find(i => i.id === id);
+  if (!ins) return;
+  // For now, just show a toast with details
+  toast(`#${ins.inscriptionNumber} \u2014 ${ins.attributes.rarity} ${ins.attributes.element} (${ins.attributes.trait})`, 'info');
+};
+
+/* ═══════════════════════════════════════════════════════
+   Leaderboard
+   ═══════════════════════════════════════════════════════ */
+let currentLBType = 'luckiest';
+
+window.setLBTab = function(type) {
+  currentLBType = type;
+  $$('.lb-tab').forEach(t => t.classList.toggle('active', t.dataset.type === type));
+  loadLeaderboard(type);
+};
+
+async function loadLeaderboard(type) {
+  try {
+    const res = await fetch(`${API_BASE}/leaderboard?type=${type}&limit=10`);
+    if (!res.ok) return;
+    const data = await res.json();
+    renderLeaderboard(data.leaderboard || [], type);
+  } catch(e) {
+    console.warn('Failed to load leaderboard:', e);
+  }
+}
+
+function renderLeaderboard(entries, type) {
+  const list = $('#leaderboard-list');
+  if (entries.length === 0) {
+    list.innerHTML = '<li class="lb-empty">No entries yet. Be the first to inscribe!</li>';
+    return;
+  }
+
+  const scoreLabels = {
+    luckiest: 'Luck',
+    whale: 'BBT',
+    opened: 'Count',
+    jackpot: 'Legendaries',
+  };
+
+  list.innerHTML = entries.map(entry => {
+    const w = entry.wallet;
+    const truncated = w.slice(0, 4) + '..' + w.slice(-4);
+    const score = typeof entry.score === 'number' ? entry.score.toLocaleString() : entry.score;
+    return `
+      <li class="lb-entry">
+        <span class="lb-rank">${entry.rank}</span>
+        <span class="lb-wallet">${truncated}</span>
+        <span class="lb-score">${score}</span>
+      </li>
+    `;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════════════
+   Epoch & Slot Hunting
+   ═══════════════════════════════════════════════════════ */
+async function loadEpoch() {
+  try {
+    const res = await fetch(`${API_BASE}/epoch/status`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const ep = data.epoch;
+    $('#epoch-name').textContent = ep.name;
+    $('#epoch-number').textContent = `Epoch #${ep.number}`;
+    $('#epoch-filled').textContent = ep.slotsFilled.toLocaleString();
+    $('#epoch-remaining').textContent = ep.slotsRemaining.toLocaleString();
+    $('#epoch-progress').style.width = ep.progress + '%';
+    $('#epoch-progress-pct').textContent = ep.progress.toFixed(1) + '%';
+  } catch(e) {
+    console.warn('Failed to load epoch:', e);
+  }
+}
+
+async function loadSlotHunting() {
+  try {
+    const res = await fetch(`${API_BASE}/slot-hunting`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const container = $('#slot-milestones');
+    if (!data.milestones || data.milestones.length === 0) {
+      container.innerHTML = '<div class="glass" style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.8rem;border-radius:var(--radius-sm);">All milestones reached!</div>';
+      return;
+    }
+
+    container.innerHTML = data.milestones.slice(0, 5).map(ms => `
+      <div class="slot-milestone glass">
+        <div class="slot-ms-left">
+          <div class="slot-ms-icon">&#x1F3AF;</div>
+          <div>
+            <div class="slot-ms-name">${escapeHtml(ms.name)}</div>
+            <div class="slot-ms-slot">Slot #${ms.slot.toLocaleString()}</div>
+          </div>
+        </div>
+        <div class="slot-ms-countdown">${ms.countdown.toLocaleString()} away</div>
+      </div>
+    `).join('');
+  } catch(e) {
+    console.warn('Failed to load slot hunting:', e);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   WebSocket Live Feed
+   ═══════════════════════════════════════════════════════ */
+function connectWS() {
+  try {
+    wsConnection = new WebSocket(WS_URL);
+
+    wsConnection.onopen = () => {
+      $('#ws-status').textContent = 'Connected';
+      $('#ws-dot').style.background = 'var(--success)';
+    };
+
+    wsConnection.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'auth_required') {
+          // Send auth
+          const timestamp = Date.now();
+          wsConnection.send(JSON.stringify({
+            type: 'auth',
+            wallet: wallet || 'anonymous',
+            signature: wallet || 'anonymous',
+            timestamp,
+          }));
+        } else if (msg.type === 'auth_success') {
+          $('#ws-status').textContent = 'Live';
+        }
+        // Handle inscription events if broadcast
+        if (msg.type === 'inscription' || msg.type === 'inscribe_event') {
+          addFeedItem(msg);
+        }
+      } catch(e) {}
+    };
+
+    wsConnection.onclose = () => {
+      $('#ws-status').textContent = 'Reconnecting...';
+      $('#ws-dot').style.background = 'var(--text-muted)';
+      setTimeout(connectWS, 5000);
+    };
+
+    wsConnection.onerror = () => {
+      $('#ws-status').textContent = 'Error';
+      $('#ws-dot').style.background = 'var(--danger)';
+    };
+  } catch(e) {
+    console.warn('WebSocket connection failed:', e);
+    $('#ws-status').textContent = 'Unavailable';
+  }
+}
+
+function addFeedItem(data) {
+  const list = $('#live-feed-list');
+  const empty = list.querySelector('.feed-empty');
+  if (empty) empty.remove();
+
+  const walletTruncated = (data.wallet || '???').slice(0, 4) + '..' + (data.wallet || '???').slice(-4);
+  const element = data.element || data.attributes?.element || '???';
+  const rarity = data.rarity || data.attributes?.rarity || 'Common';
+  const number = data.inscriptionNumber || data.number || '???';
+  const elEmoji = getElementEmoji(element);
+
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  item.setAttribute('data-rarity', rarity);
+  item.innerHTML = `${elEmoji} <span class="feed-wallet">${walletTruncated}</span> just inscribed <span class="feed-number">#${String(number).padStart(4, '0')}</span> \u2014 ${rarity} ${element}!`;
+
+  list.insertBefore(item, list.firstChild);
+
+  // Keep max 50 items
+  while (list.children.length > 50) {
+    list.removeChild(list.lastChild);
+  }
+
+  feedItems.unshift(data);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Helpers
+   ═══════════════════════════════════════════════════════ */
+function getElementEmoji(element) {
+  const map = {
+    Void:'&#x1F573;', Fire:'&#x1F525;', Water:'&#x1F4A7;', Earth:'&#x1F30D;',
+    Metal:'&#x2699;', Wood:'&#x1F333;', Thunder:'&#x26A1;', Wind:'&#x1F32C;',
+    Mountain:'&#x26F0;', Crystal:'&#x1F48E;'
+  };
+  return map[element] || '&#x2753;';
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function toast(message, type) {
+  const el = $('#toast');
+  el.textContent = message;
+  el.className = 'toast ' + (type || 'info');
+  requestAnimationFrame(() => {
+    el.classList.add('show');
+  });
+  setTimeout(() => {
+    el.classList.remove('show');
+  }, 3000);
+}
+
+/* ─── Keyboard: Enter in seed input triggers inscribe ─── */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && document.activeElement === $('#seed-input') && selectedTier && wallet) {
+    doInscribe();
+  }
+});
+
+/* ─── Init ─── */
+document.addEventListener('DOMContentLoaded', init);
+
+})();
+</script>
+</body>
+</html>

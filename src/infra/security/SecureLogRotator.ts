@@ -108,6 +108,21 @@ export class SecureLogRotator {
   getLogDir(): string {
     return this.logDir;
   }
+
+  // ── 写入日志条目（供 Logger 集成调用） ──
+  write(level: string, msg: string, meta?: Record<string, unknown>): void {
+    try {
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+      const logFile = path.join(this.logDir, `${dateStr}.log`);
+      const timeStr = now.toISOString();
+      const metaStr = meta ? ` ${JSON.stringify(meta)}` : '';
+      const line = `[${timeStr}] [${level.toUpperCase()}] ${msg}${metaStr}\n`;
+      fs.appendFileSync(logFile, line, 'utf-8');
+    } catch {
+      // 写日志失败不能影响主流程
+    }
+  }
 }
 
 function cryptoRandomBytes(size: number): Buffer {

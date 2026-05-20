@@ -54,7 +54,7 @@ echo ""
 echo "[2/10] Initializing Provider node (port $PROVIDER_PORT)..."
 HOME=$PROVIDER_DIR $NODE init \
   --provider-name "FlowProvider" \
-  --wallet "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU" \
+  --wallet "3s4AK2x2nGkKP8ZADbcKuhdPr3coSuh1XnwZEzWgpump" \
   --role provider \
   --port $PROVIDER_PORT \
   >/dev/null 2>&1

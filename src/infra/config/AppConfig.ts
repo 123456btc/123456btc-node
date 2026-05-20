@@ -20,23 +20,25 @@ export interface NodeConfig {
   burn_rate: number;
   node_port: number;
   admin_api_key: string;
-  role: 'provider' | 'subscriber' | 'relay';
+  role: 'provider' | 'subscriber' | 'relay' | 'peer';
   seeds: string[];
   db_path: string;
   log_level: 'debug' | 'info' | 'warn' | 'error';
   log_persist_days: number;
   data_dir: string;
+  settlement_mode: 'memo' | 'escrow';
 }
 
 const DEFAULTS: Partial<NodeConfig> = {
   solana_rpc: 'https://api.mainnet-beta.solana.com',
-  bbt_mint: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+  bbt_mint: '3s4AK2x2nGkKP8ZADbcKuhdPr3coSuh1XnwZEzWgpump',
   burn_rate: 0,
   node_port: 1119,
-  role: 'provider',
+  role: 'peer',
   seeds: [],
   log_level: 'info',
   log_persist_days: 7,
+  settlement_mode: 'memo',
 };
 
 @singleton()
@@ -69,6 +71,7 @@ export class AppConfig {
     if (process.env.BBT_SOLANA_RPC) envOverride.solana_rpc = process.env.BBT_SOLANA_RPC;
     if (process.env.BBT_NODE_PORT) envOverride.node_port = parseInt(process.env.BBT_NODE_PORT, 10);
     if (process.env.BBT_LOG_LEVEL) envOverride.log_level = process.env.BBT_LOG_LEVEL as NodeConfig['log_level'];
+    if (process.env.BBT_SETTLEMENT_MODE) envOverride.settlement_mode = process.env.BBT_SETTLEMENT_MODE as 'memo' | 'escrow';
 
     // 3. 合并：默认值 < 文件 < 环境变量
     const merged = {
@@ -85,14 +88,11 @@ export class AppConfig {
   }
 
   private validate(): void {
-    const required = ['provider_id', 'provider_secret', 'wallet_address'] as const;
+    const required = ['provider_id', 'wallet_address'] as const;
     for (const key of required) {
       if (!this.config[key]) {
         throw new Error(`Missing required config: ${key}`);
       }
-    }
-    if (!this.config.provider_secret || this.config.provider_secret.length < 32) {
-      throw new Error('provider_secret must be at least 32 characters');
     }
   }
 

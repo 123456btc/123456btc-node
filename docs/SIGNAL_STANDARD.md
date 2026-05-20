@@ -1,12 +1,12 @@
-# 123456btc-node 策略信号标准
+# 123456btc-node Signal Standard / 策略信号标准
 
-> 兼容 ISES v1 (Institutional Signal Execution Standard)
+> Compatible with ISES v1 (Institutional Signal Execution Standard)
 >
-> Provider 量化系统推送的信号必须符合此标准，节点才能正确解析和广播。
+> 兼容 ISES v1（机构信号执行标准）
 
 ---
 
-## 1. 标准信号格式 (ISES v1 精简版)
+## Standard Signal Format (ISES v1) / 标准信号格式
 
 ```json
 {
@@ -81,9 +81,9 @@
 
 ---
 
-## 2. 最小可用格式 (BBT 兼容简化版)
+## Minimal Format / 最小可用格式
 
-如果你的量化系统不想实现完整 ISES，可以使用**最小可用格式**：
+If your system doesn't need full ISES, use the minimal format / 如果不需要完整 ISES，使用最小格式：
 
 ```json
 {
@@ -118,33 +118,34 @@
 }
 ```
 
-**必填字段**：
-- `schema`: 必须是 `"ises.strategy_signal.v1"`
-- `signal_id`: 唯一信号 ID
-- `created_at_ms`: 毫秒时间戳
-- `source.strategy_id`: 策略 ID（必须在节点上已注册）
-- `scope.symbol`: 交易对
-- `decision.action`: `enter` | `exit` | `reduce` | `hold` | `cancel`
-- `market_context.price`: 当前价格
-- `market_context.data_quality`: `ok` | `degraded` | `degraded-but-allowed` | `bad`
+### Required Fields / 必填字段
+
+- `schema` — Must be `"ises.strategy_signal.v1"` / 必须为 `"ises.strategy_signal.v1"`
+- `signal_id` — Unique signal ID / 唯一信号 ID
+- `created_at_ms` — Millisecond timestamp / 毫秒时间戳
+- `source.strategy_id` — Strategy ID (must be registered on node) / 策略 ID
+- `scope.symbol` — Trading pair / 交易对
+- `decision.action` — `enter` | `exit` | `reduce` | `hold` | `cancel`
+- `market_context.price` — Current price / 当前价格
+- `market_context.data_quality` — `ok` | `degraded` | `degraded-but-allowed` | `bad`
 
 ---
 
-## 3. 决策类型 (decision.action)
+## Decision Types / 决策类型
 
-| action | 含义 | 适用场景 |
-|--------|------|----------|
-| `enter` | 开仓 | 新开多/空仓 |
-| `exit` | 平仓 | 完全退出持仓 |
-| `reduce` | 减仓 | 部分止盈/止损 |
-| `hold` | 持有 | 无操作，保持当前仓位 |
-| `cancel` | 取消 | 撤销之前未执行的信号 |
+| Action | Meaning / 含义 | Use case / 适用场景 |
+|--------|---------------|-------------------|
+| `enter` | Open position / 开仓 | New long/short / 新开多/空仓 |
+| `exit` | Close position / 平仓 | Full exit / 完全退出持仓 |
+| `reduce` | Reduce position / 减仓 | Partial take profit/stop loss / 部分止盈/止损 |
+| `hold` | Hold / 持有 | No action, maintain position / 保持当前仓位 |
+| `cancel` | Cancel / 取消 | Revoke unexecuted signal / 撤销未执行的信号 |
 
 ---
 
-## 4. 推送示例
+## Push Example / 推送示例
 
-### curl 推送 (完整 ISES)
+### curl (HMAC Auth)
 
 ```bash
 PROVIDER_ID="prov_xxx"
@@ -164,7 +165,6 @@ curl -X POST http://localhost:1119/provider/signals \
     "created_at_ms": '$(date +%s)000',
     "source": {
       "system": "test_bot",
-      "environment": "live",
       "strategy_id": "strat_xxx",
       "strategy_name": "BTC Momentum V2"
     },
@@ -182,16 +182,17 @@ curl -X POST http://localhost:1119/provider/signals \
       "data_quality": "ok"
     },
     "rationale": {
-      "summary": "Test signal from bot"
+      "summary": "Test signal"
     }
   }'
 ```
 
 ---
 
-## 5. 节点响应
+## Node Response / 节点响应
 
-### 成功
+### Success / 成功
+
 ```json
 {
   "success": true,
@@ -200,7 +201,8 @@ curl -X POST http://localhost:1119/provider/signals \
 }
 ```
 
-### 失败
+### Failure / 失败
+
 ```json
 {
   "error": "Strategy not found"
@@ -209,23 +211,19 @@ curl -X POST http://localhost:1119/provider/signals \
 
 ---
 
-## 6. 信号生命周期
+## Signal Lifecycle / 信号生命周期
 
 ```
-Provider 量化系统
+Provider System
     │
     │ POST /provider/signals
     ▼
-Provider 节点
-    │ 1. 校验格式 (ISES v1)
-    │ 2. 验证策略归属
-    │ 3. 写入 SQLite
-    │ 4. 本地 WebSocket 广播
-    │ 5. Gossip 广播到网络
+Provider Node
+    │ 1. Validate format (ISES v1) / 校验格式
+    │ 2. Verify strategy ownership / 验证策略归属
+    │ 3. Write to SQLite / 写入存储
+    │ 4. Local WebSocket broadcast / 本地广播
+    │ 5. Gossip broadcast to network / Gossip 广播
     ▼
-Relay 节点 ──→ Subscriber 节点 ──→ 用户客户端
-    │
-    │ (per_signal_bbt 模式)
-    ▼
-BillingCron 扣费
+Relay Nodes ──▶ Subscriber Nodes ──▶ User Client
 ```

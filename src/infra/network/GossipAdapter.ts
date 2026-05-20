@@ -30,7 +30,7 @@ export interface GossipAdapterOptions {
   nodeId: string;
   providerId: string;
   port: number;
-  role: 'provider' | 'subscriber' | 'relay';
+  role: 'provider' | 'subscriber' | 'relay' | 'peer';
   seeds: string[]; // ws://host:port/peer 格式
   topic?: string;
 }
@@ -53,6 +53,7 @@ export class GossipAdapter {
   private onMessageHandler?: (msg: GossipMessage) => void;
   private options?: GossipAdapterOptions;
   private libp2pPeerId = '';
+  private cleanupInterval?: ReturnType<typeof setInterval>;
 
   constructor(private logger: Logger) {}
 
@@ -156,7 +157,7 @@ export class GossipAdapter {
         ],
       },
       transportManager: {
-        faultTolerance: 'NO_FATAL',
+        faultTolerance: 'NO_FATAL' as any,
       },
       connectionManager: {
         maxConnections: 256,
@@ -185,6 +186,9 @@ export class GossipAdapter {
     await this.node.start();
     this.started = true;
 
+    // 定期清理 seen 去重缓存（每 60 秒清理一次）
+    this.cleanupInterval = setInterval(() => { this.seen.clear(); }, 60_000);
+
     this.logger.info('GossipAdapter (libp2p-gossipsub) started', {
       nodeId: options.nodeId,
       peerId: this.libp2pPeerId,
@@ -196,6 +200,7 @@ export class GossipAdapter {
 
   // ── 停止 ──
   async stop(): Promise<void> {
+    this.cleanupInterval && clearInterval(this.cleanupInterval);
     if (this.node) {
       await this.node.stop();
       this.node = null;
@@ -257,15 +262,6 @@ export class GossipAdapter {
       const key = `${msg.from}:${msg.seq}`;
       if (this.seen.has(key)) return;
       this.seen.add(key);
-
-      // 清理旧缓存（LRU 近似：保留最近 8000 条）
-      if (this.seen.size > 10000) {
-        const iter = this.seen.values();
-        for (let i = 0; i < 2000; i++) {
-          const val = iter.next().value;
-          if (val) this.seen.delete(val);
-        }
-      }
 
       this.onMessageHandler?.(msg);
     } catch (err) {

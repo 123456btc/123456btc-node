@@ -1,0 +1,4 @@
+require:
+  - ts-mocha
+spec: "tests/**/*.test.ts"
+timeout: 1000000

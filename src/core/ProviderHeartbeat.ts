@@ -94,9 +94,9 @@ export class ProviderHeartbeat {
   // ── 内部：提交心跳 ──
   private async runHeartbeat() {
     try {
-      // 实际实现需要 Anchor IDL + 构建 transaction
-      // 这里记录意图，真实调用需接入 deployed program
-      this.logger.info('Heartbeat tick', {
+      // TODO: 实际实现需要 Anchor IDL + 构建 heartbeat transaction
+      // 当前为占位实现，不执行链上操作
+      this.logger.info('Heartbeat tick (PLACEHOLDER - not yet on-chain)', {
         provider: this.config.providerKeypair.publicKey.toBase58(),
         pendingSignals: this.pendingSignals,
       });
@@ -111,7 +111,9 @@ export class ProviderHeartbeat {
     if (!stats || (stats as any).pending === 0) return;
 
     try {
-      this.logger.info('Merkle submit tick', {
+      // TODO: 实际实现需要构建 Merkle Root 并提交链上交易
+      // 当前为占位实现，不执行链上操作
+      this.logger.info('Merkle submit tick (PLACEHOLDER - not yet on-chain)', {
         signals: this.pendingSignals,
         provider: this.config.providerKeypair.publicKey.toBase58(),
       });
@@ -124,9 +126,9 @@ export class ProviderHeartbeat {
   // ── 内部：自动 claim ──
   private async runAutoClaim() {
     try {
-      // 查询所有活跃订阅，逐个 claim
-      // 实际实现需要遍历 subscription PDAs
-      this.logger.info('Auto claim tick', {
+      // TODO: 实际实现需要遍历 subscription PDAs 并调用 claim 指令
+      // 当前为占位实现，不执行链上操作
+      this.logger.info('Auto claim tick (PLACEHOLDER - not yet on-chain)', {
         provider: this.config.providerKeypair.publicKey.toBase58(),
       });
     } catch (err) {

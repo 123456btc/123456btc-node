@@ -9,7 +9,8 @@
 
 export interface Strategy {
   id: string;
-  provider_id: string;
+  provider_id: string;        // 兼容旧字段，新逻辑用 creator_wallet
+  creator_wallet: string;     // 策略创建者钱包地址，BBT 收款目标
   name: string;
   description?: string;
   symbol: string;
@@ -44,9 +45,10 @@ export interface Subscription {
   id: string;
   user_id: string;
   strategy_id: string;
-  status: 'active' | 'expired' | 'cancelled';
+  status: 'pending' | 'active' | 'expired' | 'cancelled';
   billing_model: 'daily_bbt' | 'per_signal_bbt' | 'free';
   next_bill_at: number | null;
+  expires_at?: number;
   created_at: number;
 }
 
@@ -100,6 +102,7 @@ export interface ProviderConfig {
   burn_rate: number;
   node_port: number;
   admin_api_key: string;
+  settlement_mode?: 'memo' | 'escrow';
 }
 
 // ───────────────────────────────────────────────

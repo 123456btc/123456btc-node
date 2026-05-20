@@ -96,7 +96,7 @@ export class ArweaveBackup {
       };
 
       this.manifest.push(manifest);
-      this.logger.info('ArweaveBackup completed', manifest);
+      this.logger.info('ArweaveBackup completed', manifest as any);
       return manifest;
     } catch (e) {
       this.logger.error('ArweaveBackup failed', e as Error);
@@ -109,7 +109,7 @@ export class ArweaveBackup {
   }
 
   // TODO: 从 Arweave 恢复
-  async restore(date: string): Promise<Signal[] | null> {
+  async restore(date: string): Promise<any[] | null> {
     this.logger.info('ArweaveBackup restore requested', { date });
     return null;
   }

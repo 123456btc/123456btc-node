@@ -1,225 +1,364 @@
 # 123456btc-node
 
-> **完全去中心化策略分发网络**
+> **[English](README.md)** | [中文](README_zh.md) | [فارسی](README_fa.md) | [မြန်မာ](README_my.md) | [العربية](README_ar.md) | [Français](README_fr.md)
+
+> **Decentralized Strategy Distribution Network**
 >
-> 所有圈成员都可以运行节点 — 策略商、订阅者、中继者，人人可部署。
+> Run your own node. Set your own price. Build your own circle.
+
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org)
+[![Solana](https://img.shields.io/badge/Solana-Devnet%20%7C%20Mainnet-9945FF.svg)](https://solana.com)
 
 ---
 
-## 核心特性
+## What is this?
 
-- **人人可运行节点** — Provider 生产信号，Subscriber 接收信号，Relay 扩大覆盖
-- **Gossip 组网** — 信号通过 P2P 协议在圈内自动传播，无单点故障
-- **链上结算** — BBT 扣费、续费、收益全部在 Solana 链上完成
-- **本地主权** — 每个节点完全独立，Provider 不垄断信号分发
-- **私域运营** — 策略商服务自己的圈子，用 BBT 收费，无需平台介入
-- **协议兼容** — 信号格式兼容 ISES v1，可与 123456btc 平台生态互通
+A fully decentralized P2P network for trading signal distribution. Deploy your own node, publish strategies, and collect BBT token subscriptions — no central server, no platform cut.
 
----
+**How it works:**
 
-## 快速开始
+1. You deploy a **Provider node**
+2. You create strategies and set prices in BBT
+3. Users discover your node in private communities
+4. Users subscribe by sending BBT to your wallet
+5. Your system pushes signals, they receive in real-time
+6. You manage your BBT according to your own needs
 
-### 安装
+**Three product layers:**
 
-```bash
-git clone <repo>
-cd 123456btc-node
-npm install
-npm run build
-```
-
-### 1. Provider 节点（策略商）
-
-```bash
-# 初始化
-npx 123456btc-node init \
-  --provider-name "AlphaQuant" \
-  --wallet <你的Solana钱包地址> \
-  --role provider \
-  --port 1119
-
-# 创建策略
-npx 123456btc-node strategy:create \
-  --name "BTC Momentum V2" \
-  --symbol BTCUSDT \
-  --pricing daily_bbt \
-  --price-day 100
-
-# 启动
-npx 123456btc-node serve
-```
-
-### 2. Subscriber 节点（用户）
-
-```bash
-npx 123456btc-node init \
-  --provider-name "MyNode" \
-  --wallet <你的Solana钱包地址> \
-  --role subscriber \
-  --port 1118 \
-  --seeds ws://provider-ip:1119/peer
-
-npx 123456btc-node serve
-```
-
-### 3. Relay 节点（社区志愿者）
-
-```bash
-npx 123456btc-node init \
-  --provider-name "RelayNode" \
-  --wallet <你的Solana钱包地址> \
-  --role relay \
-  --port 1118 \
-  --seeds ws://provider-ip:1119/peer
-
-npx 123456btc-node serve
-```
+- **Blind Boxes** — Fixed denominations (1 / 10 / 100 / 1K / 10K USDT), unbox to get strategy subscription NFTs
+- **Strategy Subscriptions** — Daily, per-signal, or free
+- **Node Network** — Run your own node, set your own pricing
 
 ---
 
-## 私域运营完整流程
+## Network Architecture
 
-### Step 1: 策略商创建策略
-
-```bash
-npx 123456btc-node strategy:create \
-  --name "BTC Momentum V2" \
-  --symbol BTCUSDT \
-  --pricing daily_bbt \
-  --price-day 100
+```
+                         ┌─────────────────┐
+                         │   Seed Node     │
+                         └────────┬────────┘
+                                  │
+                   ┌──────────────┼──────────────┐
+                   │              │              │
+          ┌────────▼─────┐ ┌──────▼──────┐ ┌────▼─────────┐
+          │   Provider   │ │    Relay    │ │  Subscriber  │
+          └───────┬──────┘ └──────┬──────┘ └───────┬──────┘
+                  │   Gossip Protocol (libp2p)      │
+                  │               │                 │
+          ┌───────▼──────┐ ┌──────▼──────┐ ┌───────▼──────┐
+          │  Subscriber  │ │  Subscriber │ │ Telegram Bot │
+          └──────────────┘ └─────────────┘ └──────────────┘
 ```
 
-### Step 2: 用户在私域群收到节点地址
+### Node Roles
 
-> "添加我的策略节点: `ws://node.alphaquant.io:1119`"
+| Role | What you do | Who runs it |
+|------|------------|-------------|
+| **Provider** | Create strategies, publish signals, collect BBT | Quant teams |
+| **Subscriber** | Receive signals, manage subscriptions | Traders |
+| **Relay** | Forward signals, expand coverage | Community volunteers |
 
-### Step 3: 用户注册并订阅
+### Signal Propagation
+
+1. Provider pushes signal via REST API (Ed25519 wallet signature)
+2. Node validates, persists to SQLite, broadcasts locally via WebSocket
+3. Signal propagates via libp2p GossipSub (TTL=5 hops)
+4. Each node deduplicates + verifies HMAC signature
+
+---
+
+## Blind Box Series
+
+Fixed denomination blind boxes. Unbox to get strategy subscription NFTs, tradable on secondary market.
+
+| Series | Value (USDT) | BBT | Fee |
+|--------|-------------|-----|-----|
+| Bronze | 1 | 100 | 3% |
+| Silver | 10 | 1,000 | 2.5% |
+| Gold | 100 | 10,000 | 2% |
+| Platinum | 1,000 | 100,000 | 1.5% |
+| Diamond | 10,000 | 1,000,000 | 1% |
+
+### What's inside
+
+| Rarity | Content | Probability | Market Ref |
+|--------|---------|-------------|------------|
+| White | 1-day trial | 40% | 10 BBT |
+| Green | 7-day subscription | 30% | 50 BBT |
+| Blue | 30-day subscription | 15% | 200 BBT |
+| Purple | 90-day subscription | 10% | 800 BBT |
+| Orange | 365-day subscription | 4% | 3,000 BBT |
+| Hidden | Permanent + private invite | 1% | 10,000+ BBT |
+
+**Synthesis:** 5 White -> 1 Green, 3 Green -> 1 Blue. Creates burn scenarios.
+
+---
+
+## Quick Start
+
+### Docker
 
 ```bash
-curl -X POST http://node.alphaquant.io:1119/users/register \
-  -d '{"wallet_address": "你的Solana钱包", "display_name": "TraderA"}'
-
-curl -X POST http://node.alphaquant.io:1119/subscriptions \
-  -d '{"wallet_address": "你的Solana钱包", "strategy_id": "strat_xxx"}'
+git clone <repo-url> && cd 123456btc-node
+cp .env.example .env
+# Edit .env with your wallet and settings
+docker compose up -d
+curl http://localhost:1119/health
 ```
 
-返回付款信息：
+### Local
+
+```bash
+npm ci && npm run build
+
+# Initialize
+123456btc-node init --name "MyNode" --wallet "YOUR_SOLANA_WALLET" --rpc "https://api.devnet.solana.com"
+
+# Create strategy
+123456btc-node strategy:create --name "BTC Alpha" --symbol "BTCUSDT" --pricing daily_bbt --price-day 100
+
+# Start
+123456btc-node serve
+```
+
+---
+
+## CLI Commands
+
+### Node
+
+```bash
+123456btc-node init              # Initialize node
+123456btc-node config            # View/update config
+123456btc-node serve             # Start node
+123456btc-node emergency-wipe    # DESTROY all data (irreversible)
+```
+
+### Strategies
+
+```bash
+123456btc-node strategy:create   # Create strategy
+123456btc-node strategy:list     # List strategies
+123456btc-node strategy bind     # Bind Agent to strategy
+123456btc-node strategy bundles  # View bundles
+123456btc-node strategy bundle   # Purchase bundle
+```
+
+### Agent Identity
+
+```bash
+123456btc-node agent register    # Register Agent (Ed25519)
+123456btc-node agent status      # View reputation
+```
+
+### Blind Boxes
+
+```bash
+123456btc-node blindbox create   # Create blind box
+123456btc-node blindbox list     # Market listings
+123456btc-node blindbox buy      # Buy blind box
+123456btc-node blindbox stats    # Market stats
+```
+
+### MCP Server
+
+```bash
+123456btc-node mcp               # Start MCP server for AI Agents
+```
+
+---
+
+## REST API
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check |
+| `GET` | `/strategies` | List strategies |
+| `POST` | `/strategies` | Create strategy |
+| `POST` | `/signals` | Publish signal |
+| `GET` | `/signals/:strategyId` | Signal history |
+| `POST` | `/subscriptions` | Create subscription |
+| `GET` | `/subscriptions` | List subscriptions |
+| `POST` | `/users/register` | Register wallet |
+| `GET` | `/user/balance` | On-chain balance |
+| `GET` | `/admin/earnings` | Earnings dashboard |
+
+### WebSocket
+
+| Path | Description |
+|------|-------------|
+| `ws://host:port` | Real-time signal push |
+| `ws://host:port/peer` | P2P gossip mesh |
+
+### Auth Example
+
+```bash
+curl -X POST http://localhost:1119/signals \
+  -H "x-wallet: <WALLET>" \
+  -H "x-wallet-signature: <ED25519_SIG>" \
+  -H "x-wallet-timestamp: <TIMESTAMP>" \
+  -d '{"strategy_id":"...","symbol":"BTCUSDT","decision":"BUY","confidence":0.85}'
+```
+
+---
+
+## BBT Token
+
+**Mint:** `3s4AK2x2nGkKP8ZADbcKuhdPr3coSuh1XnwZEzWgpump` | **Decimals:** 6 | **Chain:** Solana
+
+### Why BBT
+
+- **Standardized** — 1 BBT = 1 BBT, no exchange rate complexity
+- **Divisible** — 6 decimal places, any amount
+- **Transparent but contextual** — On-chain verifiable, every tx has a business reason
+- **Global** — 24/7, no SWIFT, no banking hours
+
+### Burn Mechanism
+
+| Scenario | Burn % |
+|----------|--------|
+| Blind box purchase | 30% |
+| Strategy subscription | 20% |
+| NFT resale | 5% |
+| Node service fee | 10% |
+| Protocol revenue | 50% buyback & burn |
+
+Total supply: 1 billion, no minting.
+
+---
+
+## Subscription & Settlement
+
+### Billing Models
+
+| Model | Description |
+|-------|-------------|
+| `daily_bbt` | Daily subscription, user sends BBT per day |
+| `per_signal_bbt` | Per-signal deduction from pre-deposited balance |
+| `free` | Free, no billing |
+
+### Settlement Flow
+
+1. User selects strategy, creates subscription
+2. Node returns: Provider wallet + amount + Memo
+3. User sends BBT with Memo: `BBT-SUB|{sub_id}|{strategy_id}|{wallet}`
+4. BillingCron polls chain every 60s, matches Memo, activates subscription
+
+---
+
+## Agent Identity System
+
+- **Register** — Ed25519 wallet signature, unique on-chain identity
+- **Reputation** — Trade win rate, signal accuracy, uptime, stake weight
+- **NFT** — Bot ID NFT minting, on-chain verifiable
+- **Binding** — Agent -> Strategy, set execution mode (auto/semi_auto/manual) and fee share
+- **Bundles** — Strategy NFT + Blind Box combo products
+
+---
+
+## Security
+
+- **Wallet auth** — Ed25519 signatures, no username/password
+- **Message signing** — HMAC-SHA256, anti-forgery, anti-replay
+- **Data encryption** — AES-256 on sensitive fields, keys not on server
+- **Log policy** — Auto-scrubbed, 7-day rotation & destruction
+- **Emergency wipe** — `kill -USR1 <pid>` zeroes & deletes database, logs, config
+- **Docker non-root** — UID 1001, minimal privileges
+- **P2P encryption** — libp2p noise protocol, E2E encrypted gossip
+
+Full checklist: [SECURITY.md](SECURITY.md)
+
+---
+
+## Telegram Bot
+
+Enable by setting `TELEGRAM_BOT_TOKEN` in `.env`.
+
+| Command | Description |
+|---------|-------------|
+| `/wallet <address>` | Bind wallet |
+| `/strategies` | List strategies |
+| `/subscribe <id> <days>` | Subscribe |
+| `/signals` | Recent signals |
+| `/status` | Subscription status |
+
+---
+
+## MCP Integration
+
+Built-in MCP Server for AI Agents (Claude Code, Cursor, etc.).
+
 ```json
 {
-  "subscription_id": "sub_xxx",
-  "payment": {
-    "provider_wallet": "Provider钱包地址",
-    "amount_bbt": 100,
-    "memo": "BBT-SUB|sub_xxx|strat_xxx|你的钱包",
-    "instruction": "请转账 100 BBT，Memo 填写: BBT-SUB|sub_xxx|strat_xxx|你的钱包"
+  "mcpServers": {
+    "123456btc": {
+      "command": "npx",
+      "args": ["tsx", "/path/to/src/mcp/server.ts"]
+    }
   }
 }
 ```
 
-### Step 4: 用户转账 BBT
-
-通过 Phantom / OKX 等钱包向 Provider 钱包转账，**必须填写 Memo**。
-
-### Step 5: 节点自动确认，开始接收信号
-
-节点 `BillingCron` 每 60 秒轮询链上收款，匹配 Memo 后自动激活订阅。
-
-信号通过 Gossip 传播到用户节点，实时推送到用户手机/电脑。
-
----
-
-## 三种节点角色
-
-| 角色 | 功能 | 适合谁 |
-|------|------|--------|
-| **Provider** | 创建策略、推送信号、收取 BBT、 gossip 广播 | 策略商 / 量化团队 |
-| **Subscriber** | 接收信号、本地缓存、HTTP 轮询、gossip 接收 | 普通交易员 |
-| **Relay** | 转发信号、提高网络覆盖率、不生产信号 | 大户 / KOL / 志愿者 |
+| Tool | Description |
+|------|-------------|
+| `list_strategies` | List strategies |
+| `create_strategy` | Create strategy |
+| `publish_signal` | Publish signal |
+| `get_signals` | Signal history |
+| `my_subscriptions` | My subscriptions |
+| `register_wallet` | Register wallet |
+| `node_status` | Node status |
 
 ---
 
-## 网络架构
+## Environment Variables
 
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BBT_PROVIDER_ID` | (required) | Provider ID |
+| `BBT_WALLET_ADDRESS` | (required) | Your Solana wallet |
+| `BBT_NODE_PORT` | `1119` | Port |
+| `BBT_SOLANA_RPC` | mainnet | Solana RPC |
+| `BBT_SETTLEMENT_MODE` | `memo` | Settlement mode |
+| `BBT_SEEDS` | (empty) | Seed peer URLs |
+| `TELEGRAM_BOT_TOKEN` | (empty) | Telegram Bot |
+| `ENABLE_AUTO_EXECUTION` | `false` | Auto-execution via Jupiter |
+| `BBT_LOG_LEVEL` | `info` | Log level |
+
+Full list: [.env.example](.env.example)
+
+---
+
+## Tech Stack
+
+Node.js 20+ / TypeScript / SQLite / Solana / libp2p GossipSub / Commander / Pino / Telegraf / tsyringe / Jupiter / MCP
+
+---
+
+## Documentation
+
+| Doc | Content |
+|-----|---------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Network topology, signal propagation, data model |
+| [SIGNAL_STANDARD.md](docs/SIGNAL_STANDARD.md) | ISES v1 signal standard |
+| [MCP-INTEGRATION.md](docs/MCP-INTEGRATION.md) | AI Agent integration |
+| [DEPLOY.md](DEPLOY.md) | Docker, HTTPS, backup |
+| [SECURITY.md](SECURITY.md) | Security audit checklist |
+
+---
+
+## Test
+
+```bash
+npm test              # Run all tests
+npm run test:watch    # Watch mode
+npm run lint          # Lint
 ```
-Provider 节点 (生产信号)
-    │
-    │ Gossip (WebSocket)
-    ▼
-Relay 节点 A ←────→ Relay 节点 B
-    │                   │
-    ▼                   ▼
-Subscriber 节点      Subscriber 节点
-    │                   │
-    ▼                   ▼
-  用户手机           用户电脑
-```
-
-- 每个节点启动时连接 **种子节点** (`--seeds`)
-- 信号通过 **Gossip 协议** 传播，ttl=5 跳
-- 所有消息带 **HMAC 签名**，防止伪造
-- 120 秒无心跳的连接自动清理
-
----
-
-## CLI 命令
-
-| 命令 | 说明 |
-|------|------|
-| `init` | 初始化节点（选择 role: provider/subscriber/relay） |
-| `config` | 查看/修改配置 |
-| `strategy:create` | 创建策略（Provider） |
-| `strategy:list` | 列出策略 |
-| `serve` | 启动节点（HTTP + WebSocket + Gossip） |
-| `user:add` | 手动添加用户（测试用） |
-
----
-
-## HTTP API
-
-### 用户端
-- `POST /users/register` — 注册钱包
-- `POST /subscriptions` — 创建订阅（返回付款信息）
-- `GET /subscriptions?wallet=xxx` — 查询订阅状态
-- `GET /strategies` — 公开策略列表
-- `GET /signals?wallet=xxx` — 信号历史（HTTP 轮询）
-- `GET /user/balance?wallet=xxx` — 链上 BBT 余额
-
-### Provider 端
-- `POST /provider/signals` — 推送信号（HMAC 认证）
-
-### Admin 端
-- `POST /admin/strategies` — 创建策略
-- `GET /admin/earnings` — 收益面板
-- `GET /admin/subscribers` — 订阅者列表
-
-### WebSocket
-- `ws://host:port` — 用户实时接收信号
-- `ws://host:port/peer` — 节点间 Gossip 组网
-
----
-
-## 与 123456btc 平台的关系
-
-| 模式 | 说明 |
-|------|------|
-| **完全独立** | 不连接平台，纯私域运营 |
-| **信号互通** | Provider 可把信号推送到平台，平台用户也能收到 |
-| **数据同步** | 可选把策略表现回同步到平台，用于排行榜 |
-
----
-
-## 技术栈
-
-- **Runtime**: Node.js 20+
-- **Database**: SQLite (better-sqlite3)
-- **WebSocket**: ws
-- **Blockchain**: @solana/web3.js + @solana/spl-token
-- **P2P**: 自定义 Gossip over WebSocket
-- **CLI**: commander
-- **Language**: TypeScript
 
 ---
 
 ## License
 
-MIT
+Apache License 2.0

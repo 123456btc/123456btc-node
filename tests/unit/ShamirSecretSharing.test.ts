@@ -2,76 +2,131 @@ import { describe, it, expect } from 'vitest';
 import { ShamirSecretSharing, split, combine } from '../../src/infra/security/ShamirSecretSharing.js';
 import { randomBytes } from 'crypto';
 
-const stubLogger = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {}, child: () => stubLogger } as any;
+const mockLogger = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} } as any;
 
 function randomHex(len = 64): string {
   return randomBytes(len / 2).toString('hex');
 }
 
 describe('ShamirSecretSharing', () => {
-  const sss = new ShamirSecretSharing(stubLogger);
+  const sss = new ShamirSecretSharing(mockLogger);
 
-  it('splits and combines with exact threshold', () => {
+  // ── split + combine：3/5 阈值，任意 3 份可恢复 ──
+  it('3/5 threshold: any 3 shares can recover the secret', () => {
     const secret = randomHex(64);
     const shares = sss.split(secret, 5, 3);
 
-    // 任意3份恢复
-    const recovered = sss.combine([shares[0], shares[2], shares[4]]);
-    expect(recovered).toBe(secret);
+    expect(shares.length).toBe(5);
 
-    const recovered2 = sss.combine([shares[1], shares[3], shares[0]]);
-    expect(recovered2).toBe(secret);
+    // 多种 3 份组合都能恢复
+    const combos = [
+      [0, 1, 2],
+      [0, 2, 4],
+      [1, 3, 4],
+      [0, 1, 4],
+      [2, 3, 4],
+    ];
+
+    for (const combo of combos) {
+      const recovered = sss.combine(combo.map((i) => shares[i]));
+      expect(recovered).toBe(secret);
+    }
   });
 
-  it('fails with fewer than threshold shares', () => {
+  // ── split + combine：2 份不足以恢复 ──
+  it('2 shares are insufficient to recover the secret (produces wrong value)', () => {
     const secret = randomHex(64);
     const shares = sss.split(secret, 5, 3);
 
-    // 2份无法恢复（拉格朗日插值会产出错误值，但不会被检测，除非长度 < 2 抛错）
-    // 实际上2份恢复出的值大概率 != secret，但我们不保证能检测到
-    // 这里只验证 combine 不会因 2 份抛错（因为 threshold=3, 给了 2 份，插值会算出某个值）
+    // 2 份恢复出的值大概率 != secret
     const fake = sss.combine([shares[0], shares[1]]);
     expect(fake).not.toBe(secret);
   });
 
-  it('all 5 shares recover the secret', () => {
-    const secret = randomHex(64);
-    const shares = sss.split(secret, 5, 3);
-    const recovered = sss.combine(shares);
-    expect(recovered).toBe(secret);
+  // ── split：threshold < 2 抛异常 ──
+  it('throws when threshold < 2', () => {
+    expect(() => sss.split(randomHex(), 5, 1)).toThrow('Threshold must be >= 2');
+    expect(() => sss.split(randomHex(), 5, 0)).toThrow('Threshold must be >= 2');
   });
 
-  it('convenience functions work', () => {
+  // ── split：totalShares < threshold 抛异常 ──
+  it('throws when totalShares < threshold', () => {
+    expect(() => sss.split(randomHex(), 2, 3)).toThrow('Total shares must be >= threshold');
+    expect(() => sss.split(randomHex(), 4, 5)).toThrow('Total shares must be >= threshold');
+  });
+
+  // ── combine：少于 2 份抛异常 ──
+  it('throws when combining fewer than 2 shares', () => {
+    const secret = randomHex(64);
+    const shares = sss.split(secret, 5, 3);
+
+    expect(() => sss.combine([])).toThrow('Need at least 2 shares to combine');
+    expect(() => sss.combine([shares[0]])).toThrow('Need at least 2 shares to combine');
+  });
+
+  // ── 不同分片组合都能恢复同一 secret ──
+  it('different share combinations all recover the same secret', () => {
+    const secret = randomHex(64);
+    const shares = sss.split(secret, 7, 4);
+
+    // 生成多组不同的 4 份组合
+    const combos = [
+      [0, 1, 2, 3],
+      [0, 1, 2, 6],
+      [1, 3, 5, 6],
+      [0, 2, 4, 6],
+      [3, 4, 5, 6],
+    ];
+
+    const results = new Set<string>();
+    for (const combo of combos) {
+      const recovered = sss.combine(combo.map((i) => shares[i]));
+      results.add(recovered);
+    }
+
+    // 所有组合恢复出同一 secret
+    expect(results.size).toBe(1);
+    expect(results.has(secret)).toBe(true);
+  });
+
+  // ── split 产生的分片 x 值唯一 ──
+  it('split produces shares with unique x values', () => {
+    const secret = randomHex(64);
+    const shares = sss.split(secret, 5, 3);
+
+    const xValues = shares.map((s) => s.x);
+    const uniqueX = new Set(xValues);
+
+    expect(uniqueX.size).toBe(shares.length);
+    // x 从 1 开始
+    expect(xValues).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  // ── convenience functions work ──
+  it('top-level convenience split/combine functions work', () => {
     const secret = randomHex(64);
     const shares = split(secret, 5, 3);
     const recovered = combine([shares[0], shares[2], shares[4]]);
     expect(recovered).toBe(secret);
   });
 
-  it('handles edge case: threshold = total', () => {
+  // ── all shares recover the secret ──
+  it('using all shares also recovers the secret', () => {
     const secret = randomHex(64);
-    const shares = sss.split(secret, 3, 3);
+    const shares = sss.split(secret, 5, 3);
     const recovered = sss.combine(shares);
     expect(recovered).toBe(secret);
   });
 
-  it('throws on invalid parameters', () => {
-    expect(() => sss.split(randomHex(), 2, 1)).toThrow('Threshold must be >= 2');
-    expect(() => sss.split(randomHex(), 2, 3)).toThrow('Total shares must be >= threshold');
+  // ── totalShares > 255 抛异常 ──
+  it('throws when totalShares > 255', () => {
     expect(() => sss.split(randomHex(), 256, 3)).toThrow('Total shares must be <= 255');
   });
 
-  it('deterministic across same secret but different random poly', () => {
-    // 两次分片同一 secret，shares 不同，但任意 threshold 份都能恢复
+  // ── verifyShares helper ──
+  it('verifyShares returns true for valid shares', () => {
     const secret = randomHex(64);
-    const shares1 = sss.split(secret, 5, 3);
-    const shares2 = sss.split(secret, 5, 3);
-
-    // shares 应该不同（随机多项式不同）
-    expect(shares1[0].y).not.toBe(shares2[0].y);
-
-    // 但都能恢复
-    expect(sss.combine(shares1.slice(0, 3))).toBe(secret);
-    expect(sss.combine(shares2.slice(0, 3))).toBe(secret);
+    const shares = sss.split(secret, 5, 3);
+    expect(sss.verifyShares([shares[0], shares[1], shares[2]])).toBe(true);
   });
 });

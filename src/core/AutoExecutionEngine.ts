@@ -24,10 +24,12 @@
 import 'reflect-metadata';
 import { singleton } from 'tsyringe';
 import { Connection, Keypair, PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
+// @ts-ignore — @solana/spl-token is ESM-only; runtime import works in Node16+ module resolution
 import { getAssociatedTokenAddress, getAccount } from '@solana/spl-token';
 import { Logger } from '../infra/logger/Logger.js';
 import { JupiterClient } from '../infra/chain/JupiterClient.js';
 import type { Signal } from '../types/index.js';
+import type { SubscriptionStore } from './SubscriptionStore.js';
 
 export interface ExecutionConfig {
   rpcUrl: string;
@@ -74,6 +76,7 @@ export class AutoExecutionEngine {
     private logger: Logger,
     private jupiter: JupiterClient,
     private config: ExecutionConfig,
+    private store?: SubscriptionStore,
   ) {
     this.connection = new Connection(config.rpcUrl, 'confirmed');
   }
@@ -281,7 +284,24 @@ export class AutoExecutionEngine {
       createdAt: Date.now(),
     };
 
-    this.trades.push(record);
+    if (this.store) {
+      this.store.insertExecutionTrade({
+        id: record.id,
+        signal_id: record.signalId,
+        strategy_id: record.strategyId,
+        user_id: record.userId,
+        decision: record.decision,
+        input_mint: record.inputMint,
+        output_mint: record.outputMint,
+        input_amount: record.inputAmount,
+        output_amount: record.outputAmount,
+        tx_signature: record.txSignature,
+        status: record.status,
+        created_at: record.createdAt,
+      });
+    } else {
+      this.trades.push(record); // fallback
+    }
 
     // 等待确认（非阻塞）
     this.waitForConfirmation(signature, record);
@@ -314,6 +334,31 @@ export class AutoExecutionEngine {
 
   // ── 获取交易历史 ──
   getTrades(userId?: string, strategyId?: string): TradeRecord[] {
+    if (this.store) {
+      let rows: any[];
+      if (strategyId) {
+        rows = this.store.getTradesByStrategy(strategyId);
+      } else if (userId) {
+        rows = this.store.getTradesByUser(userId);
+      } else {
+        // No filter — fall back to in-memory or query all (limited)
+        rows = this.trades;
+      }
+      return rows.map((r: any) => ({
+        id: r.id,
+        signalId: r.signal_id,
+        strategyId: r.strategy_id,
+        userId: r.user_id,
+        decision: r.decision,
+        inputMint: r.input_mint,
+        outputMint: r.output_mint,
+        inputAmount: r.input_amount,
+        outputAmount: r.output_amount,
+        txSignature: r.tx_signature,
+        status: r.status,
+        createdAt: r.created_at,
+      }));
+    }
     let result = this.trades;
     if (userId) result = result.filter((t) => t.userId === userId);
     if (strategyId) result = result.filter((t) => t.strategyId === strategyId);

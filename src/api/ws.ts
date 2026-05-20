@@ -8,6 +8,8 @@ import type { SubscriptionStore } from '../core/SubscriptionStore.js';
 import type { AuthManager } from '../core/AuthManager.js';
 import type { WsMessage } from '../types/index.js';
 
+const MAX_WS_CONNECTIONS = 1000;
+
 export function createWebSocketServer(
   options: ServerOptions,
   hub: SignalHub,
@@ -17,8 +19,15 @@ export function createWebSocketServer(
   const wss = new WebSocketServer(options);
 
   wss.on('connection', (ws, req) => {
+    // 连接数限制
+    if (wss.clients.size > MAX_WS_CONNECTIONS) {
+      console.warn(`[WS] Max connections reached (${MAX_WS_CONNECTIONS}), rejecting ${req.socket.remoteAddress}`);
+      ws.close(1013, 'Server overloaded');
+      return;
+    }
+
     hub.registerClient(ws);
-    console.log(`[WS] Client connected from ${req.socket.remoteAddress}`);
+    console.log(`[WS] Client connected from ${req.socket.remoteAddress} (total: ${wss.clients.size})`);
 
     ws.on('message', async (data) => {
       try {
@@ -38,6 +47,11 @@ export function createWebSocketServer(
           }
 
           case 'subscribe': {
+            const clientMeta = hub.getClientMeta(ws);
+            if (!clientMeta?.authenticated) {
+              ws.send(JSON.stringify({ type: 'error', message: 'Not authenticated' }));
+              break;
+            }
             const { strategy_id } = msg as { strategy_id: string };
             const error = hub.subscribeClient(ws, strategy_id);
             if (error) {
@@ -49,6 +63,11 @@ export function createWebSocketServer(
           }
 
           case 'unsubscribe': {
+            const clientMetaUnsub = hub.getClientMeta(ws);
+            if (!clientMetaUnsub?.authenticated) {
+              ws.send(JSON.stringify({ type: 'error', message: 'Not authenticated' }));
+              break;
+            }
             const { strategy_id } = msg as { strategy_id: string };
             hub.unsubscribeClient(ws, strategy_id);
             ws.send(JSON.stringify({ type: 'unsubscribed', strategy_id }));

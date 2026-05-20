@@ -15,7 +15,7 @@ import { Logger } from '../logger/Logger.js';
 
 // 使用 tweetnacl 进行 Ed25519（纯 JS，无 native 依赖）
 // 如果环境支持，可用 @noble/ed25519 替代
-let nacl: typeof import('tweetnacl') | null = null;
+let nacl: any = null;
 
 try {
   nacl = require('tweetnacl');

@@ -10,14 +10,17 @@ import 'reflect-metadata';
 import { singleton } from 'tsyringe';
 import pino, { type Logger as PinoLogger } from 'pino';
 import { AppConfig } from '../config/AppConfig.js';
+import { SecureLogRotator } from '../security/SecureLogRotator.js';
 
 @singleton()
 export class Logger {
   private logger: PinoLogger;
   private config: AppConfig;
+  private rotator?: SecureLogRotator;
 
-  constructor(config?: AppConfig) {
+  constructor(config?: AppConfig, rotator?: SecureLogRotator) {
     this.config = config ?? ({} as AppConfig);
+    this.rotator = rotator;
     const level = config?.get('log_level') ?? 'info';
     const isProd = config?.isProduction() ?? false;
 
@@ -71,6 +74,7 @@ export class Logger {
     } else {
       this.logger.debug(msg);
     }
+    this.rotator?.write('debug', msg, meta);
   }
 
   info(msg: string, meta?: Record<string, unknown>): void {
@@ -79,6 +83,7 @@ export class Logger {
     } else {
       this.logger.info(msg);
     }
+    this.rotator?.write('info', msg, meta);
   }
 
   warn(msg: string, meta?: Record<string, unknown>): void {
@@ -87,6 +92,7 @@ export class Logger {
     } else {
       this.logger.warn(msg);
     }
+    this.rotator?.write('warn', msg, meta);
   }
 
   error(msg: string, err?: Error, meta?: Record<string, unknown>): void {
@@ -96,5 +102,6 @@ export class Logger {
       payload.stack = err.stack;
     }
     this.logger.error(this.sanitize(payload), msg);
+    this.rotator?.write('error', msg, { ...meta, error: err?.message, stack: err?.stack });
   }
 }

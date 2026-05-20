@@ -31,7 +31,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cluster = getArg(args, '--cluster') || 'devnet';
   const keypairPath = getArg(args, '--keypair') || path.join(process.env.HOME || '', '.config/solana/id.json');
-  const bbtMint = getArg(args, '--bbt-mint') || '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+  const bbtMint = getArg(args, '--bbt-mint') || '3s4AK2x2nGkKP8ZADbcKuhdPr3coSuh1XnwZEzWgpump';
 
   const rpcUrl = CLUSTER_URLS[cluster];
   if (!rpcUrl) {

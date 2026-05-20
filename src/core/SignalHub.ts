@@ -33,7 +33,7 @@ export class SignalHub {
 
   // ── Provider 推送信号入口 ──
 
-  async ingestSignal(raw: unknown, providerId: string): Promise<{ ok: boolean; signal?: Signal; error?: string; dispatched: number }> {
+  async ingestSignal(raw: unknown, creatorWallet: string): Promise<{ ok: boolean; signal?: Signal; error?: string; dispatched: number }> {
     // 1. 基础校验
     if (!raw || typeof raw !== 'object') {
       return { ok: false, error: 'Signal must be an object', dispatched: 0 };
@@ -43,7 +43,7 @@ export class SignalHub {
 
     // 2. 支持 ISES v1 简化映射
     const ises = body.schema === 'ises.strategy_signal.v1'
-      ? body as IsesStrategySignalLite
+      ? body as unknown as IsesStrategySignalLite
       : null;
 
     const strategyId = ises?.source?.strategy_id ?? (body.strategy_id as string);
@@ -59,8 +59,8 @@ export class SignalHub {
     if (!strategy) {
       return { ok: false, error: 'Strategy not found', dispatched: 0 };
     }
-    if (strategy.provider_id !== providerId) {
-      return { ok: false, error: 'Strategy does not belong to provider', dispatched: 0 };
+    if (strategy.creator_wallet !== creatorWallet) {
+      return { ok: false, error: 'Strategy does not belong to this wallet', dispatched: 0 };
     }
     if (strategy.status !== 'live') {
       return { ok: false, error: 'Strategy is not live', dispatched: 0 };
@@ -69,7 +69,7 @@ export class SignalHub {
     // 4. 构造 Signal
     const signal: Omit<Signal, 'id' | 'created_at'> = {
       strategy_id: strategyId,
-      provider_id: providerId,
+      provider_id: creatorWallet,
       symbol,
       decision,
       confidence: ises?.decision?.confidence ?? (body.confidence as number) ?? 0,
@@ -129,6 +129,14 @@ export class SignalHub {
     for (const [ws, meta] of this.clients) {
       if (!meta.authenticated) continue;
       if (!meta.subscribedStrategies.has(signal.strategy_id)) continue;
+
+      // 安全校验：实时检查订阅是否仍然有效（防止过期订阅接收信号）
+      const sub = this.store.getSubscription(meta.userId, signal.strategy_id);
+      if (!sub || sub.status !== 'active') {
+        meta.subscribedStrategies.delete(signal.strategy_id);
+        continue;
+      }
+
       if (ws.readyState === 1 /* OPEN */) {
         ws.send(msg);
         count++;

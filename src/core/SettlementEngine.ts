@@ -18,6 +18,7 @@ import {
   createAssociatedTokenAccountInstruction,
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
+// @ts-ignore — @solana/spl-token is ESM-only but this file is loaded via tsx
 } from '@solana/spl-token';
 import type { ProviderConfig } from '../types/index.js';
 import type { SubscriptionStore } from './SubscriptionStore.js';
@@ -91,7 +92,7 @@ export class SettlementEngine {
   ): Promise<{ valid: boolean; error?: string }> {
     try {
       const tx = await this.connection.getParsedTransaction(signature, {
-        commitment: 'confirmed',
+        commitment: 'finalized',
         maxSupportedTransactionVersion: 0,
       });
       if (!tx) return { valid: false, error: 'Transaction not found' };
@@ -99,7 +100,7 @@ export class SettlementEngine {
 
       const instructions = tx.transaction.message.instructions;
       for (const ix of instructions) {
-        if (ix.program !== 'spl-token' && (ix as any).programId !== TOKEN_PROGRAM_ID.toBase58()) continue;
+        if ((ix as any).program !== 'spl-token' && (ix as any).programId !== TOKEN_PROGRAM_ID.toBase58()) continue;
         const parsed = (ix as any).parsed;
         if (!parsed || parsed.type !== 'transfer') continue;
 
@@ -125,47 +126,99 @@ export class SettlementEngine {
 
   // ── 监听收款（日订阅确认） ──
 
-  async pollIncomingPayments(sinceSignature?: string): Promise<{ signature: string; amount: number; memo?: string }[]> {
+  async pollIncomingPayments(sinceSignature?: string): Promise<{ signature: string; amount: number; memo?: string; fromWallet: string }[]> {
     const signatures = await this.connection.getSignaturesForAddress(
       this.providerATA!,
       { limit: 20 },
-      'confirmed'
+      'finalized'
     );
 
-    const results: { signature: string; amount: number; memo?: string }[] = [];
+    const results: { signature: string; amount: number; memo?: string; fromWallet: string }[] = [];
 
+    // Filter valid signatures first, respecting sinceSignature stop condition
+    const validSigs: typeof signatures = [];
     for (const sigInfo of signatures) {
       if (sinceSignature && sigInfo.signature === sinceSignature) break;
       if (sigInfo.err) continue;
+      validSigs.push(sigInfo);
+    }
 
-      const tx = await this.connection.getParsedTransaction(sigInfo.signature, {
-        commitment: 'confirmed',
-        maxSupportedTransactionVersion: 0,
-      });
+    // Parallel processing with concurrency limit
+    const CONCURRENT_LIMIT = 5;
+    for (let i = 0; i < validSigs.length; i += CONCURRENT_LIMIT) {
+      const batch = validSigs.slice(i, i + CONCURRENT_LIMIT);
+      const batchResults = await Promise.allSettled(
+        batch.map(async (sigInfo) => {
+          const tx = await this.connection.getParsedTransaction(sigInfo.signature, {
+            commitment: 'finalized',
+            maxSupportedTransactionVersion: 0,
+          });
 
-      if (!tx?.meta?.postTokenBalances || !tx.meta.preTokenBalances) continue;
+          if (!tx?.meta?.postTokenBalances || !tx.meta.preTokenBalances) return null;
 
-      // 计算 Provider ATA 的余额变化
-      const pre = tx.meta.preTokenBalances.find(
-        (b) => b.owner === this.config.wallet_address && b.mint === this.config.bbt_mint
+          // 计算 Provider ATA 的余额变化
+          const pre = tx.meta.preTokenBalances.find(
+            (b) => b.owner === this.config.wallet_address && b.mint === this.config.bbt_mint
+          );
+          const post = tx.meta.postTokenBalances.find(
+            (b) => b.owner === this.config.wallet_address && b.mint === this.config.bbt_mint
+          );
+
+          if (!pre || !post) return null;
+
+          const preAmount = Number(pre.uiTokenAmount.amount);
+          const postAmount = Number(post.uiTokenAmount.amount);
+          const delta = (postAmount - preAmount) / 1e6;
+
+          if (delta <= 0) return null;
+
+          // 提取真实发送方：preTokenBalances 中余额减少的钱包 owner
+          const senderEntry = tx.meta.preTokenBalances.find(
+            (b) => b.mint === this.config.bbt_mint
+              && b.owner !== this.config.wallet_address
+              && b.owner !== undefined
+          );
+          const fromWallet = senderEntry?.owner || 'unknown';
+          // 尝试解析 memo（兼容多个版本的 Memo 程序）
+          const MEMO_PROGRAM_IDS = [
+            'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr', // spl-memo v1/v3
+            'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMz', // spl-memo v2 (legacy)
+          ];
+
+          const memoInstr = tx.transaction.message.instructions.find(
+            (ix: Record<string, unknown>) => {
+              if (ix.program === 'spl-memo' || ix.program === 'memo') return true;
+              const programId = (ix as { programId?: string }).programId;
+              return programId ? MEMO_PROGRAM_IDS.includes(programId) : false;
+            }
+          );
+
+          let memo: string | undefined;
+          if (memoInstr) {
+            const instr = memoInstr as Record<string, unknown>;
+            if (typeof instr.parsed === 'string') {
+              memo = instr.parsed;
+            } else if (typeof (instr as any).data === 'string') {
+              // Some versions use base58-encoded 'data' field
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-var-requires
+                const bs58 = require('bs58') as { decode: (input: string) => Uint8Array };
+                memo = Buffer.from(bs58.decode((instr as any).data)).toString('utf-8');
+              } catch {
+                memo = (instr as any).data;
+              }
+            }
+          }
+
+          return { signature: sigInfo.signature, amount: delta, memo, fromWallet };
+        })
       );
-      const post = tx.meta.postTokenBalances.find(
-        (b) => b.owner === this.config.wallet_address && b.mint === this.config.bbt_mint
-      );
 
-      if (!pre || !post) continue;
-
-      const preAmount = Number(pre.uiTokenAmount.amount);
-      const postAmount = Number(post.uiTokenAmount.amount);
-      const delta = (postAmount - preAmount) / 1e6;
-
-      if (delta > 0) {
-        // 尝试解析 memo
-        const memoInstr = tx.transaction.message.instructions.find(
-          (ix: Record<string, unknown>) => ix.program === 'memo' || (ix as { programId?: string }).programId === 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'
-        );
-        const memo = memoInstr ? (memoInstr as { parsed?: string }).parsed : undefined;
-        results.push({ signature: sigInfo.signature, amount: delta, memo });
+      // Collect successful results
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled' && result.value) {
+          results.push(result.value);
+        }
       }
     }
 
@@ -188,14 +241,10 @@ export class SettlementEngine {
     // 确保 Provider ATA 存在（通常已存在）
     const providerATA = this.providerATA!;
 
-    // 可选：添加 memo
+    // 可选：添加 memo 指令
     if (memo) {
-      tx.add(
-        new Transaction().add(
-          SystemProgram.transfer({ fromPubkey: fromWallet, toPubkey: fromWallet, lamports: 0 })
-        )
-      );
-      // 实际 memo 需要使用 @solana/spl-memo，这里简化
+      const { createMemoInstruction } = await import('@solana/spl-memo');
+      tx.add(createMemoInstruction(memo));
     }
 
     tx.add(

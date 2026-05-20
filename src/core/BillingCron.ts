@@ -12,6 +12,8 @@ import { getCurrentTimestamp } from '../utils/crypto.js';
 
 export class BillingCron {
   private intervalId: ReturnType<typeof setInterval> | null = null;
+  private intervalMs: number = 60_000;
+  private running = false;
   private lastCheckedSignature?: string;
 
   constructor(
@@ -24,13 +26,27 @@ export class BillingCron {
 
   start(intervalMs: number = 60_000) {
     if (this.intervalId) return;
-    this.intervalId = setInterval(() => this.tick(), intervalMs);
+    this.intervalMs = intervalMs;
+    this.scheduleNext();
     console.log(`[BillingCron] started, interval=${intervalMs}ms`);
+  }
+
+  private scheduleNext() {
+    this.intervalId = setTimeout(async () => {
+      if (this.running) return; // 跳过重叠执行
+      this.running = true;
+      try {
+        await this.tick();
+      } finally {
+        this.running = false;
+        this.scheduleNext();
+      }
+    }, this.intervalMs) as unknown as ReturnType<typeof setInterval>;
   }
 
   stop() {
     if (this.intervalId) {
-      clearInterval(this.intervalId);
+      clearTimeout(this.intervalId as unknown as number);
       this.intervalId = null;
     }
   }
@@ -55,11 +71,9 @@ export class BillingCron {
       if (sub.billing_model === 'daily_bbt') {
         this.onRenewalDue?.(sub);
 
-        // 宽限期 24h
-        if (now > (sub.next_bill_at ?? 0) + 24 * 60 * 60 * 1000) {
-          this.store.updateSubscriptionStatus(sub.id, 'expired');
-          console.log(`[BillingCron] Subscription expired: ${sub.id}`);
-        }
+        // 到期即停止信号推送（立即过期），用户续费后重新激活
+        this.store.updateSubscriptionStatus(sub.id, 'expired');
+        console.log(`[BillingCron] Subscription expired, signals stopped: ${sub.id}`);
       }
     }
   }
@@ -69,20 +83,40 @@ export class BillingCron {
   private async pollChainPayments() {
     try {
       const payments = await this.settlement.pollIncomingPayments(this.lastCheckedSignature);
-      if (payments.length > 0) {
-        this.lastCheckedSignature = payments[0].signature;
+      if (payments.length === 0) return;
+
+      // Reverse to process oldest first (Solana API returns newest-first)
+      const ordered = [...payments].reverse();
+      let lastSuccessfullyProcessed: string | undefined;
+
+      for (const payment of ordered) {
+        try {
+          this.processPayment(payment.signature, payment.amount, payment.memo, payment.fromWallet);
+          lastSuccessfullyProcessed = payment.signature;
+        } catch (e) {
+          console.error(`[BillingCron] Failed to process payment ${payment.signature}:`, e);
+          break; // Stop; remaining payments will be retried next tick
+        }
       }
 
-      for (const payment of payments) {
-        this.processPayment(payment.signature, payment.amount, payment.memo);
+      // Only advance checkpoint after successful processing
+      if (lastSuccessfullyProcessed) {
+        this.lastCheckedSignature = lastSuccessfullyProcessed;
       }
     } catch (e) {
       console.error('[BillingCron] pollChainPayments error:', e);
     }
   }
 
-  private processPayment(signature: string, amount: number, memo?: string) {
-    console.log(`[BillingCron] Incoming payment: ${amount} BBT, tx=${signature}, memo=${memo}`);
+  private processPayment(signature: string, amount: number, memo?: string, fromWallet?: string) {
+    console.log(`[BillingCron] Incoming payment: ${amount} BBT, tx=${signature?.slice(0, 8)}..., from=${fromWallet?.slice(0, 8)}..., memo=${memo}`);
+
+    // Idempotency: skip if already processed
+    const existingBilling = this.store.getBillingByTxSignature(signature);
+    if (existingBilling) {
+      console.log(`[BillingCron] Payment already processed: tx=${signature}, billing_id=${existingBilling.id}`);
+      return;
+    }
 
     // 1. 尝试从 memo 解析订阅信息
     // Memo 格式: BBT-SUB|{subscription_id}|{strategy_id}|{user_wallet}
@@ -93,9 +127,20 @@ export class BillingCron {
         const strategyId = parts[2];
         const wallet = parts[3];
 
+        // 安全校验：发送方必须与 Memo 中的钱包地址一致
+        if (fromWallet && fromWallet !== wallet) {
+          console.warn(`[BillingCron] SECURITY: Sender mismatch! tx sender=${fromWallet}, memo wallet=${wallet}. Rejecting.`);
+          return;
+        }
+
         const sub = this.store.getSubscriptionById(subId);
         if (sub) {
-          // 确认现有订阅的付款
+          // 校验订阅归属：sub 必须属于 memo 中 wallet 对应的用户
+          const owner = this.store.getUserByWallet(wallet);
+          if (!owner || sub.user_id !== owner.id) {
+            console.warn(`[BillingCron] SECURITY: Subscription ${subId} does not belong to wallet ${wallet}. Rejecting.`);
+            return;
+          }
           this.confirmSubscriptionPayment(sub, signature, amount);
           return;
         }
@@ -165,7 +210,7 @@ export class BillingCron {
 
   // ── 按信号计费 ──
 
-  chargePerSignal(sub: Subscription, signal: Signal): boolean {
+  async chargePerSignal(sub: Subscription, signal: Signal): Promise<boolean> {
     if (sub.billing_model !== 'per_signal_bbt') return true;
 
     const strategy = this.store.getStrategy(sub.strategy_id);
@@ -174,8 +219,11 @@ export class BillingCron {
     const user = this.store.getUser(sub.user_id);
     if (!user) return false;
 
-    // 检查用户链上余额是否充足（本地缓存余额）
-    if (user.chain_bbt_balance < strategy.price_per_signal) {
+    // 实时查询链上余额（不依赖缓存）
+    const chainBalance = await this.settlement.getWalletBBTBalance(user.wallet_address);
+    this.store.updateUserBalance(user.id, chainBalance);
+
+    if (chainBalance < strategy.price_per_signal) {
       this.store.createBilling({
         subscription_id: sub.id,
         user_id: sub.user_id,

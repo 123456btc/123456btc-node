@@ -1,81 +1,84 @@
-# 123456btc-node Architecture
+# 123456btc-node Architecture / 架构文档
 
-> 完全去中心化策略分发网络
-> **所有圈成员都可以运行节点** — 策略商、订阅者、中继者，人人可部署。
-
----
-
-## 1. 核心原则
-
-| 原则 | 说明 |
-|------|------|
-| **人人可运行** | Provider 跑生产节点，订阅者跑接收节点，大户跑中继节点 |
-| **无单点故障** | 信号通过 gossip 协议在圈内传播，不依赖任何中心服务器 |
-| **链上结算** | BBT 扣费、分账全部在 Solana 链上完成（SPL Token Transfer + Memo） |
-| **本地主权** | 每个节点完全拥有自己的数据，Provider 不垄断信号分发 |
-| **协议兼容** | 信号格式兼容 ISES v1 和 BBT Signal Protocol v1，可与平台生态互通 |
+> Fully decentralized strategy distribution network / 完全去中心化策略分发网络
+>
+> Everyone can run a node — strategy creators, subscribers, relays.
+>
+> 所有人都能运行节点 — 策略商、订阅者、中继者。
 
 ---
 
-## 2. 网络拓扑
+## Core Principles / 核心原则
+
+| Principle / 原则 | Description / 说明 |
+|------------------|-------------------|
+| **Everyone can run / 人人可运行** | Provider produces signals, Subscriber receives, Relay forwards / Provider 生产信号，Subscriber 接收，Relay 转发 |
+| **No single point of failure / 无单点故障** | Signals propagate via gossip protocol, no central server / 信号通过 Gossip 协议传播，不依赖中心服务器 |
+| **On-chain settlement / 链上结算** | BBT billing and revenue sharing on Solana (SPL Token + Memo) / BBT 扣费和分账在 Solana 链上完成 |
+| **Local sovereignty / 本地主权** | Each node owns its own data, Provider doesn't monopolize distribution / 每个节点拥有自己的数据 |
+| **Protocol compatible / 协议兼容** | Signal format compatible with ISES v1 / 信号格式兼容 ISES v1 |
+
+---
+
+## Network Topology / 网络拓扑
 
 ```
                     ┌─────────────────┐
-                    │   种子节点 A      │
-                    │  (VPS / 家用)    │
+                    │   Seed Node     │
+                    │   种子节点       │
                     └────────┬────────┘
                              │
               ┌──────────────┼──────────────┐
               │              │              │
      ┌────────▼─────┐ ┌──────▼──────┐ ┌────▼─────────┐
-     │ Provider 节点 │ │ Relay 节点  │ │ Subscriber 节点│
-     │  (生产信号)   │ │  (信号中继)  │ │  (接收信号)   │
+     │   Provider   │ │    Relay    │ │  Subscriber  │
+     │  (produces)  │ │ (forwards)  │ │  (receives)  │
+     │   发布信号    │ │   转发信号   │ │   接收信号    │
      └───────┬──────┘ └──────┬──────┘ └───────┬──────┘
              │               │                │
-             │    Gossip Protocol (WebSocket) │
+             │    Gossip Protocol (WebSocket)  │
              │               │                │
      ┌───────▼──────┐ ┌──────▼──────┐ ┌──────▼──────┐
-     │ Subscriber   │ │ Subscriber  │ │ Subscriber  │
-     │ 节点 (手机)   │ │ 节点 (VPS)  │ │ 节点 (家用)  │
+     │  Subscriber  │ │  Subscriber │ │  Subscriber │
+     │   (mobile)   │ │   (VPS)    │ │   (home)    │
      └──────────────┘ └─────────────┘ └─────────────┘
 ```
 
-### 节点角色
+### Node Roles / 节点角色
 
-| 角色 | 功能 | 谁运行 |
-|------|------|--------|
-| **Provider** | 创建策略、推送信号、收取 BBT | 策略商/量化团队 |
-| **Subscriber** | 接收信号、本地缓存、HTTP 轮询 | 普通用户/交易员 |
-| **Relay** | 转发信号、提高网络覆盖率 | 大户/志愿者/社区 KOL |
+| Role / 角色 | Function / 功能 | Who runs / 谁运行 |
+|-------------|----------------|------------------|
+| **Provider** | Create strategies, push signals, collect BBT / 创建策略、推送信号、收取 BBT | Strategy creators / 策略商 |
+| **Subscriber** | Receive signals, local cache, HTTP polling / 接收信号、本地缓存 | Traders / 交易员 |
+| **Relay** | Forward signals, expand network coverage / 转发信号、扩大网络覆盖 | Volunteers / 志愿者 |
 
 ---
 
-## 3. 信号传播流程 (Gossip)
+## Signal Propagation (Gossip) / 信号传播
 
 ```
-Provider 量化系统
-       │ POST /provider/signals (HMAC 认证)
+Provider System
+       │ POST /provider/signals (Ed25519 auth)
        ▼
 ┌──────────────────┐
-│  Provider 节点    │ ── 1. 校验信号
-│                  │ ── 2. 写入本地 SQLite
-└───────┬──────────┘ ── 3. 本地 WebSocket 广播
+│  Provider Node   │ ── 1. Validate signal / 校验信号
+│                  │ ── 2. Write to SQLite / 写入本地存储
+└───────┬──────────┘ ── 3. Local WebSocket broadcast / 本地广播
         │
         │ Gossip: broadcastSignal(signal, ttl=5)
         ▼
 ┌──────────────────┐     ┌──────────────────┐
-│   Relay 节点 A    │────▶│   Relay 节点 B    │
-│  (ttl=4 → 转发)   │     │  (ttl=3 → 转发)   │
+│   Relay Node A   │────▶│   Relay Node B   │
+│  (ttl=4, forward)│     │  (ttl=3, forward)│
 └───────┬──────────┘     └───────┬──────────┘
         │                         │
         ▼                         ▼
 ┌──────────────────┐     ┌──────────────────┐
-│ Subscriber 节点   │     │ Subscriber 节点   │
-│ (本地广播给用户)   │     │ (本地广播给用户)   │
+│ Subscriber Node  │     │ Subscriber Node  │
 └──────────────────┘     └──────────────────┘
 ```
 
-### Gossip 消息格式
+### Gossip Message Format / Gossip 消息格式
 
 ```json
 {
@@ -88,17 +91,19 @@ Provider 量化系统
 }
 ```
 
-### 传播规则
-- **ttl** = Time To Live，每转发一次减 1，ttl=0 停止传播
-- **去重**：每个节点维护 `seenMessages` 集合，已处理过的消息不再转发
-- **签名验证**：所有 gossip 消息带 HMAC-SHA256 签名，防止伪造
-- **死连接清理**：120 秒无心跳的连接自动断开
+### Propagation Rules / 传播规则
+
+- **TTL** = Time To Live, decrements each hop, stops at 0 / 每转发一次减 1，为 0 停止传播
+- **Deduplication / 去重** — Each node maintains `seenMessages` set / 每个节点维护已见消息集合
+- **Signature verification / 签名验证** — All gossip messages carry HMAC-SHA256 / 所有消息带 HMAC-SHA256 签名
+- **Dead connection cleanup / 死连接清理** — 120s no heartbeat → disconnect / 120 秒无心跳自动断开
 
 ---
 
-## 4. 数据模型
+## Data Model / 数据模型
 
-### 4.1 策略 (strategies)
+### Strategies / 策略
+
 ```sql
 CREATE TABLE strategies (
   id TEXT PRIMARY KEY,
@@ -117,7 +122,8 @@ CREATE TABLE strategies (
 );
 ```
 
-### 4.2 用户/订阅者 (users)
+### Users / 用户
+
 ```sql
 CREATE TABLE users (
   id TEXT PRIMARY KEY,
@@ -129,7 +135,8 @@ CREATE TABLE users (
 );
 ```
 
-### 4.3 订阅 (subscriptions)
+### Subscriptions / 订阅
+
 ```sql
 CREATE TABLE subscriptions (
   id TEXT PRIMARY KEY,
@@ -143,7 +150,8 @@ CREATE TABLE subscriptions (
 );
 ```
 
-### 4.4 信号历史 (signals)
+### Signals / 信号
+
 ```sql
 CREATE TABLE signals (
   id TEXT PRIMARY KEY,
@@ -161,7 +169,8 @@ CREATE TABLE signals (
 );
 ```
 
-### 4.5 账单 (billing_records)
+### Billing Records / 账单
+
 ```sql
 CREATE TABLE billing_records (
   id TEXT PRIMARY KEY,
@@ -177,148 +186,100 @@ CREATE TABLE billing_records (
 
 ---
 
-## 5. 链上结算设计 (SettlementEngine)
+## On-Chain Settlement / 链上结算
 
-### 5.1 BBT 代币参数
-- Mint Address: `7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU` (主网)
+### BBT Token
+
+- Mint Address: `3s4AK2x2nGkKP8ZADbcKuhdPr3coSuh1XnwZEzWgpump` (mainnet)
 - Decimals: 6
 
-### 5.2 扣费模式
+### Billing Models / 计费模式
 
-**日订阅模式 (`daily_bbt`)**
-1. 用户创建订阅，节点返回付款信息（Provider 钱包 + 金额 + Memo）
-2. 用户向 Provider 钱包转账 `price_per_day` BBT
-3. Memo 格式: `BBT-SUB|{subscription_id}|{strategy_id}|{user_wallet}`
-4. 节点通过 `SettlementEngine.pollIncomingPayments()` 监听链上入账
-5. 匹配 Memo 后自动激活/续费订阅
+**Daily subscription / 日订阅 (`daily_bbt`)**
 
-**按信号模式 (`per_signal_bbt`)**
-1. 用户预存 BBT 到 Provider 钱包（或每次信号单独转账）
-2. 信号触发时，节点自动扣除 `price_per_signal` BBT
-3. 余额不足时信号仍广播但标记 "unpaid"，用户补款后解锁
+1. User creates subscription, node returns payment info (Provider wallet + amount + Memo) / 用户创建订阅，节点返回付款信息
+2. User sends `price_per_day` BBT to Provider wallet / 用户向 Provider 钱包转账
+3. Memo format: `BBT-SUB|{subscription_id}|{strategy_id}|{user_wallet}`
+4. `BillingCron.pollIncomingPayments()` monitors on-chain incoming payments / 节点监听链上入账
+5. Match Memo → auto-activate/renew subscription / 匹配后自动激活/续费
 
-**免费模式 (`free`)**
-- 不扣费，直接广播
+**Per-signal / 按信号 (`per_signal_bbt`)**
 
-### 5.3 收益归属
-- **100% 收益归 Provider**（节点运营者）
-- 平台不参与分账（去中心化模式下无平台抽成）
-- Provider 可自行决定 burn 比例，通过链上 burn 交易完成
+1. User pre-deposits BBT to Provider wallet / 用户预存 BBT
+2. Signal triggers, node auto-deducts `price_per_signal` BBT / 信号触发时自动扣费
+3. Insufficient balance → signal still broadcast but marked "unpaid" / 余额不足时信号标记未付费
+
+**Free / 免费 (`free`)**
+
+- No billing, direct broadcast / 不扣费，直接广播
+
+### Revenue Attribution / 收益归属
+
+- **100% revenue goes to Provider** / 收益全部归 Provider
+- No platform cut in decentralized mode / 去中心化模式无平台抽成
 
 ---
 
-## 6. 认证体系
+## Authentication / 认证体系
 
-### 6.1 Provider 认证（推送信号）
-- 本地配置文件 `~/.123456btc-node/config.json`
+### Provider Auth (push signals) / Provider 认证
+
+- Config file: `~/.123456btc-node/config.json`
 - HTTP Header: `X-Provider-Id` + `X-Provider-Signature` (HMAC-SHA256)
-- 防重放：`X-Provider-Timestamp` 必须在 60 秒内
+- Anti-replay: `X-Provider-Timestamp` must be within 60 seconds / 防重放：时间戳必须在 60 秒内
 
-### 6.2 用户认证（接收信号）
-- 钱包签名认证（Solana Ed25519）
-- WebSocket 连接时传入 `?wallet={address}&signature={sig}&timestamp={ts}`
-- 节点验证签名后建立连接
+### User Auth (receive signals) / 用户认证
 
-### 6.3 节点间认证（Gossip）
-- 基于 Provider Secret 派生的 HMAC
-- 所有 gossip 消息带签名，伪造消息会被丢弃
+- Wallet signature (Solana Ed25519) / 钱包签名认证
+- WebSocket: `?wallet={address}&signature={sig}&timestamp={ts}`
+- Node verifies signature before establishing connection / 验证签名后建立连接
 
-### 6.4 Admin 认证（管理节点）
-- 本地 CLI 直接操作 SQLite
-- 远程管理通过 `X-Admin-Api-Key` HTTP Header
+### Inter-node Auth (Gossip) / 节点间认证
 
----
+- HMAC derived from Provider Secret / 基于 Provider Secret 派生的 HMAC
+- All gossip messages carry signature, forged messages are dropped / 伪造消息会被丢弃
 
-## 7. 私域流量运营闭环
+### Admin Auth / Admin 认证
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        私域运营流程                               │
-│                                                                  │
-│  1. 策略商部署 Provider 节点 (VPS / 家用电脑)                      │
-│       └─ 创建策略，设置 BBT 价格                                   │
-│                                                                  │
-│  2. 策略商在私域群 (微信/DC/TG) 分享节点地址                        │
-│       └─ "添加我的节点: ws://node.alphaquant.io:1119"            │
-│                                                                  │
-│  3. 用户运行 Subscriber 节点 或直接 WebSocket 连接                 │
-│       └─ 钱包签名认证 → 查看策略列表 → 选择订阅                      │
-│                                                                  │
-│  4. 用户按指引转账 BBT 到 Provider 钱包                            │
-│       └─ Memo: BBT-SUB|sub_xxx|strat_xxx|wallet_xxx              │
-│                                                                  │
-│  5. 节点自动确认收款，激活订阅                                     │
-│       └─ BillingCron 轮询链上 → 匹配 Memo → 更新 SQLite            │
-│                                                                  │
-│  6. 信号通过 Gossip 传播到所有在线节点                              │
-│       └─ Provider → Relay → Subscriber → 用户手机                  │
-│                                                                  │
-│  7. 每日续费提醒 / 按信号扣费 / 欠费暂停                            │
-│       └─ BillingCron 自动处理                                     │
-└─────────────────────────────────────────────────────────────────┘
-```
+- Local CLI: direct SQLite access / 本地 CLI 直接操作
+- Remote: `X-Admin-Api-Key` HTTP Header
 
 ---
 
-## 8. 与 123456btc 平台的关系
+## Deployment Modes / 部署模式
 
-| 模式 | 说明 |
-|------|------|
-| **完全独立** | 节点自成生态，不连接平台，适合纯私域 |
-| **信号互通** | Provider 节点可把信号 **推送** 到平台，让平台用户也收到 |
-| **数据同步** | 可选把策略表现数据回同步到平台，用于排行榜/信誉 |
-| **平台 fallback** | 如果私域节点宕机，用户可通过平台 API 继续接收信号 |
+### Provider Node / Provider 节点
 
----
-
-## 9. 部署模式
-
-### Provider 节点（策略商）
 ```bash
-123456btc-node init \
-  --provider-name "AlphaQuant" \
-  --wallet <Provider_Solana_Wallet> \
-  --role provider \
-  --port 1119
-
+123456btc-node init --name "AlphaQuant" --wallet <WALLET> --port 1119
 123456btc-node strategy:create --name "BTC V2" --symbol BTCUSDT --pricing daily_bbt --price-day 100
 123456btc-node serve
 ```
 
-### Subscriber 节点（普通用户）
-```bash
-123456btc-node init \
-  --provider-name "MyReceiver" \
-  --wallet <My_Solana_Wallet> \
-  --role subscriber \
-  --port 1118 \
-  --seeds ws://provider-node.com:1119/peer
+### Subscriber Node / Subscriber 节点
 
+```bash
+123456btc-node init --name "MyReceiver" --wallet <WALLET> --port 1118 --seeds ws://provider-node.com:1119/peer
 123456btc-node serve
 ```
 
-### Relay 节点（社区志愿者）
-```bash
-123456btc-node init \
-  --provider-name "CommunityRelay" \
-  --wallet <Relay_Wallet> \
-  --role relay \
-  --port 1118 \
-  --seeds ws://provider-node.com:1119/peer,ws://another-relay.com:1118/peer
+### Relay Node / Relay 节点
 
+```bash
+123456btc-node init --name "CommunityRelay" --wallet <WALLET> --port 1118 --seeds ws://provider.com:1119/peer,ws://relay.com:1118/peer
 123456btc-node serve
 ```
 
 ---
 
-## 10. 技术栈
+## Tech Stack / 技术栈
 
-| 组件 | 选型 |
-|------|------|
+| Component / 组件 | Choice / 选型 |
+|------------------|--------------|
 | Runtime | Node.js 20+ |
 | Database | SQLite (better-sqlite3) |
 | HTTP / WS | Node.js http + ws |
 | Blockchain | @solana/web3.js + @solana/spl-token |
 | CLI | commander |
-| P2P | 自定义 Gossip over WebSocket |
+| P2P | Custom Gossip over WebSocket / 自定义 Gossip |
 | Language | TypeScript |

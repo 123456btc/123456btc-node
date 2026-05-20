@@ -60,6 +60,7 @@ export class SubscriptionStore {
       CREATE TABLE IF NOT EXISTS strategies (
         id TEXT PRIMARY KEY,
         provider_id TEXT NOT NULL,
+        creator_wallet TEXT NOT NULL DEFAULT '',
         name TEXT NOT NULL,
         description TEXT,
         symbol TEXT NOT NULL,
@@ -114,12 +115,139 @@ export class SubscriptionStore {
         subscription_id TEXT NOT NULL,
         user_id TEXT NOT NULL,
         strategy_id TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'subscription',
         amount_bbt REAL NOT NULL,
         status TEXT DEFAULT 'pending',
-        tx_signature TEXT,
+        tx_signature TEXT UNIQUE,
         created_at INTEGER
       );
+
+      CREATE INDEX IF NOT EXISTS idx_signals_strategy_created ON signals(strategy_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_subs_strategy_status ON subscriptions(strategy_id, status);
+      CREATE INDEX IF NOT EXISTS idx_subs_user_status ON subscriptions(user_id, status);
+      CREATE INDEX IF NOT EXISTS idx_subs_status_bill ON subscriptions(status, next_bill_at);
+      CREATE INDEX IF NOT EXISTS idx_billing_status ON billing_records(status);
+
+      -- 盲盒记录表
+      CREATE TABLE IF NOT EXISTS blindbox_records (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        user_wallet TEXT NOT NULL,
+        tier_id TEXT NOT NULL,
+        tier_name TEXT NOT NULL,
+        cost_bbt REAL NOT NULL,
+        created_at INTEGER NOT NULL,
+        claimed INTEGER NOT NULL DEFAULT 0,
+        claim_tx TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_blindbox_user ON blindbox_records(user_id, created_at DESC);
+
+      -- 自动执行交易表
+      CREATE TABLE IF NOT EXISTS execution_trades (
+        id TEXT PRIMARY KEY,
+        signal_id TEXT NOT NULL,
+        strategy_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        decision TEXT NOT NULL,
+        input_mint TEXT NOT NULL,
+        output_mint TEXT NOT NULL,
+        input_amount REAL NOT NULL,
+        output_amount REAL NOT NULL,
+        tx_signature TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_trades_user ON execution_trades(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_trades_strategy ON execution_trades(strategy_id, created_at DESC);
+
+      -- Provider 质押表
+      CREATE TABLE IF NOT EXISTS provider_stakes (
+        id TEXT PRIMARY KEY,
+        wallet_address TEXT NOT NULL,
+        amount_bbt REAL NOT NULL,
+        status TEXT DEFAULT 'active',
+        created_at INTEGER,
+        unlock_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_stakes_wallet ON provider_stakes(wallet_address, status);
     `);
+
+    this.migrateTables();
+  }
+
+  private migrateTables() {
+    // 创建 schema 版本表
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_version (
+        version INTEGER PRIMARY KEY,
+        applied_at INTEGER NOT NULL
+      )
+    `);
+
+    // 获取当前版本
+    const current = this.db.prepare('SELECT MAX(version) as version FROM schema_version').get() as { version: number | null };
+    const currentVersion = current?.version || 0;
+
+    // 定义迁移列表
+    const migrations = [
+      {
+        version: 1,
+        name: 'add_type_column_to_billing_records',
+        up: () => {
+          try {
+            this.db.prepare('SELECT type FROM billing_records LIMIT 1').get();
+          } catch {
+            this.db.exec("ALTER TABLE billing_records ADD COLUMN type TEXT NOT NULL DEFAULT 'subscription'");
+          }
+        },
+      },
+      {
+        version: 2,
+        name: 'add_tx_signature_unique_index',
+        up: () => {
+          this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_tx_signature ON billing_records(tx_signature) WHERE tx_signature IS NOT NULL');
+        },
+      },
+      {
+        version: 3,
+        name: 'add_creator_wallet_to_strategies',
+        up: () => {
+          try {
+            this.db.prepare('SELECT creator_wallet FROM strategies LIMIT 1').get();
+          } catch {
+            this.db.exec("ALTER TABLE strategies ADD COLUMN creator_wallet TEXT NOT NULL DEFAULT ''");
+          }
+        },
+      },
+      {
+        version: 4,
+        name: 'add_provider_stakes',
+        up: () => {
+          this.db.exec(`CREATE TABLE IF NOT EXISTS provider_stakes (
+            id TEXT PRIMARY KEY,
+            wallet_address TEXT NOT NULL,
+            amount_bbt REAL NOT NULL,
+            status TEXT DEFAULT 'active',
+            created_at INTEGER,
+            unlock_at INTEGER
+          )`);
+          this.db.exec('CREATE INDEX IF NOT EXISTS idx_stakes_wallet ON provider_stakes(wallet_address, status)');
+        },
+      },
+    ];
+
+    // 按顺序执行未执行的迁移
+    for (const migration of migrations) {
+      if (migration.version > currentVersion) {
+        try {
+          migration.up();
+          this.db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(migration.version, getCurrentTimestamp());
+          console.log(`[SubscriptionStore] Migration v${migration.version} applied: ${migration.name}`);
+        } catch (e) {
+          console.warn(`[SubscriptionStore] Migration v${migration.version} failed (${migration.name}):`, (e as Error).message);
+        }
+      }
+    }
   }
 
   // ═══════════════════════════════════════════
@@ -134,10 +262,10 @@ export class SubscriptionStore {
     
 
     const stmt = this.db.prepare(`
-      INSERT INTO strategies (id, provider_id, name, description, symbol, market_type, pricing_model, price_per_day, price_per_signal, min_bbt_tier, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO strategies (id, provider_id, creator_wallet, name, description, symbol, market_type, pricing_model, price_per_day, price_per_signal, min_bbt_tier, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(id, s.provider_id, s.name, s.description, s.symbol, s.market_type, s.pricing_model, s.price_per_day, s.price_per_signal, s.min_bbt_tier, s.status, now, now);
+    stmt.run(id, s.provider_id, s.creator_wallet || '', s.name, s.description, s.symbol, s.market_type, s.pricing_model, s.price_per_day, s.price_per_signal, s.min_bbt_tier, s.status, now, now);
     return s;
   }
 
@@ -245,8 +373,12 @@ return this.db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(id);
   }
 
   getActiveSubscriptionsByUser(userId: string): Subscription[] {
-    
+
     return this.db.prepare("SELECT * FROM subscriptions WHERE user_id = ? AND status = 'active'").all(userId);
+  }
+
+  getSubscriptionsByUser(userId: string): Subscription[] {
+    return this.db.prepare("SELECT * FROM subscriptions WHERE user_id = ? AND status IN ('active', 'pending') ORDER BY created_at DESC").all(userId);
   }
 
   updateSubscriptionStatus(id: string, status: Subscription['status']) {
@@ -307,23 +439,33 @@ return this.db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(id);
   // ═══════════════════════════════════════════
 
   createBilling(record: Omit<BillingRecord, 'id' | 'created_at'>): BillingRecord {
+    // Idempotency: if tx_signature already exists, return existing record
+    if (record.tx_signature) {
+      const existing = this.db.prepare('SELECT * FROM billing_records WHERE tx_signature = ?').get(record.tx_signature);
+      if (existing) {
+        console.log(`[SubscriptionStore] Billing already exists for tx=${record.tx_signature}, skipping`);
+        return existing as BillingRecord;
+      }
+    }
+
     const id = generateId();
     const now = getCurrentTimestamp();
     const r: BillingRecord = { ...record, id, created_at: now };
 
-    
-
     const stmt = this.db.prepare(`
-      INSERT INTO billing_records (id, subscription_id, user_id, strategy_id, amount_bbt, status, tx_signature, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO billing_records (id, subscription_id, user_id, strategy_id, type, amount_bbt, status, tx_signature, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    stmt.run(id, r.subscription_id, r.user_id, r.strategy_id, r.amount_bbt, r.status, r.tx_signature, now);
+    stmt.run(id, r.subscription_id, r.user_id, r.strategy_id, r.type, r.amount_bbt, r.status, r.tx_signature ?? null, now);
     return r;
   }
 
   listBillingByUser(userId: string): BillingRecord[] {
-    
     return this.db.prepare('SELECT * FROM billing_records WHERE user_id = ? ORDER BY created_at DESC').all(userId);
+  }
+
+  getBillingByTxSignature(txSignature: string): BillingRecord | undefined {
+    return this.db.prepare('SELECT * FROM billing_records WHERE tx_signature = ?').get(txSignature);
   }
 
   getTotalBillingByStatus(status: string): number {
@@ -347,6 +489,72 @@ return this.db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(id);
       JOIN users u ON b.user_id = u.id
       ORDER BY b.created_at DESC LIMIT ?
     `).all(limit);
+  }
+
+  // ═══════════════════════════════════════════
+  // BlindBox Records
+  // ═══════════════════════════════════════════
+
+  insertBlindBoxRecord(record: { id: string; user_id: string; user_wallet: string; tier_id: string; tier_name: string; cost_bbt: number; created_at: number; claimed: boolean }): void {
+    this.db.prepare('INSERT INTO blindbox_records (id, user_id, user_wallet, tier_id, tier_name, cost_bbt, created_at, claimed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(record.id, record.user_id, record.user_wallet, record.tier_id, record.tier_name, record.cost_bbt, record.created_at, record.claimed ? 1 : 0);
+  }
+
+  getBlindBoxByUser(userId: string, limit: number = 50): any[] {
+    return this.db.prepare('SELECT * FROM blindbox_records WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(userId, limit);
+  }
+
+  getRecentBlindBox(limit: number = 50): any[] {
+    return this.db.prepare('SELECT * FROM blindbox_records ORDER BY created_at DESC LIMIT ?').all(limit);
+  }
+
+  updateBlindBoxClaimed(id: string, claimed: boolean, claimTx?: string): void {
+    this.db.prepare('UPDATE blindbox_records SET claimed = ?, claim_tx = ? WHERE id = ?').run(claimed ? 1 : 0, claimTx || null, id);
+  }
+
+  getBlindBoxDailyCount(userId: string, dateStart: number, dateEnd: number): number {
+    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM blindbox_records WHERE user_id = ? AND created_at >= ? AND created_at < ?').get(userId, dateStart, dateEnd) as any;
+    return row?.cnt || 0;
+  }
+
+  // ═══════════════════════════════════════════
+  // Execution Trades
+  // ═══════════════════════════════════════════
+
+  insertExecutionTrade(trade: { id: string; signal_id: string; strategy_id: string; user_id: string; decision: string; input_mint: string; output_mint: string; input_amount: number; output_amount: number; tx_signature: string; status: string; created_at: number }): void {
+    this.db.prepare('INSERT INTO execution_trades (id, signal_id, strategy_id, user_id, decision, input_mint, output_mint, input_amount, output_amount, tx_signature, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(trade.id, trade.signal_id, trade.strategy_id, trade.user_id, trade.decision, trade.input_mint, trade.output_mint, trade.input_amount, trade.output_amount, trade.tx_signature, trade.status, trade.created_at);
+  }
+
+  getTradesByUser(userId: string, limit: number = 50, offset: number = 0): any[] {
+    return this.db.prepare('SELECT * FROM execution_trades WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(userId, limit, offset);
+  }
+
+  getTradesByStrategy(strategyId: string, limit: number = 50): any[] {
+    return this.db.prepare('SELECT * FROM execution_trades WHERE strategy_id = ? ORDER BY created_at DESC LIMIT ?').all(strategyId, limit);
+  }
+
+  // ═══════════════════════════════════════════
+  // Provider Stakes
+  // ═══════════════════════════════════════════
+
+  createStake(walletAddress: string, amountBbt: number, lockDays: number = 30): any {
+    const id = `stake_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const now = Date.now();
+    const unlockAt = now + lockDays * 24 * 60 * 60 * 1000;
+    this.db.prepare('INSERT INTO provider_stakes (id, wallet_address, amount_bbt, status, created_at, unlock_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, walletAddress, amountBbt, 'active', now, unlockAt);
+    return { id, wallet_address: walletAddress, amount_bbt: amountBbt, status: 'active', created_at: now, unlock_at: unlockAt };
+  }
+
+  getActiveStake(walletAddress: string): any {
+    return this.db.prepare('SELECT * FROM provider_stakes WHERE wallet_address = ? AND status = ? ORDER BY created_at DESC LIMIT 1').get(walletAddress, 'active');
+  }
+
+  slashStake(stakeId: string): void {
+    this.db.prepare("UPDATE provider_stakes SET status = 'slashed' WHERE id = ?").run(stakeId);
+  }
+
+  getTotalStakedBbt(): number {
+    const row = this.db.prepare("SELECT COALESCE(SUM(amount_bbt), 0) as total FROM provider_stakes WHERE status = 'active'").get() as any;
+    return row?.total || 0;
   }
 
   close() {

@@ -65,7 +65,7 @@ export class AuthManager {
 
   verifyWalletSignature(walletAddress: string, signature: string, timestamp: number, message?: string): WalletAuthResult {
     // 防重放
-    if (Math.abs(Date.now() - timestamp) > 300_000) {
+    if (Math.abs(Date.now() - timestamp) > 60_000) {
       return { valid: false, error: 'Timestamp expired' };
     }
 
@@ -75,7 +75,8 @@ export class AuthManager {
       const msgBytes = new TextEncoder().encode(msg);
       const sigBytes = Buffer.from(signature, 'base64');
 
-      const valid = pubKey.verify(msgBytes, sigBytes);
+      // @ts-ignore — nacl.sign.detached.verify via PublicKey extension
+      const valid = pubKey.verify ? pubKey.verify(msgBytes, sigBytes) : false;
       if (!valid) {
         return { valid: false, error: 'Invalid wallet signature' };
       }

@@ -3,6 +3,47 @@ dist/
 data/
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 *.log
 .env
+.env.local
+.env.production
 .DS_Store
+
+# Private internal docs (NEVER commit to public repo — use public_docs/ for public)
+_internal/
+
+# TLS certificates (never commit)
+docker/certs/
+
+# Backups
+backups/
+
+# Solana keys (NEVER commit)
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!contracts/Anchor.toml
+contracts/target/deploy/*-keypair.json
+contracts/target/deploy/*.so
+
+# Build artifacts
+.next/
+contracts/target/
+contracts/evm/bridge/artifacts/
+contracts/evm/bridge/cache/
+contracts/evm/bridge/node_modules/
+contracts/evm/bridge/typechain-types/
+frontend/node_modules/
+frontend/.next/
+frontend/dist/
+*.so
+*.pdb
+
+# Test wallets & keys
+*.pem
+*.key
+*-keypair.json
+test-ledger/

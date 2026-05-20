@@ -14,10 +14,10 @@ import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import http from 'http';
 import type { SignalHub } from './SignalHub.js';
 import type { Signal } from '../types/index.js';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { GossipAdapter } from '../infra/network/GossipAdapter.js';
 
-export type NodeRole = 'provider' | 'subscriber' | 'relay';
+export type NodeRole = 'provider' | 'subscriber' | 'relay' | 'peer';
 
 interface PeerInfo {
   url: string;
@@ -44,20 +44,21 @@ export class PeerNetwork {
   private nodeId: string;
   private gossipKey: string;
   private announceInterval?: ReturnType<typeof setInterval>;
+  private cleanupInterval?: ReturnType<typeof setInterval>;
   private gossipAdapter: GossipAdapter;
   private gossipStarted = false;
 
   constructor(
     private role: NodeRole,
-    private providerId: string,
+    private walletAddress: string,
     private port: number,
     private hub: SignalHub,
     private seedPeers: string[] = [],
     gossipAdapter?: GossipAdapter,
   ) {
-    this.nodeId = `${role}_${providerId}_${Date.now().toString(36)}`;
-    // 同一 provider 圈子内的所有节点共享同一个 gossip key，用于互验签名
-    this.gossipKey = createHmac('sha256', 'gossip-salt-v1').update(providerId).digest('hex');
+    this.nodeId = `${walletAddress}_${Date.now().toString(36)}`;
+    // 每个节点用自己的钱包地址派生 gossip key
+    this.gossipKey = createHmac('sha256', 'gossip-salt-v1').update(walletAddress).digest('hex');
     this.gossipAdapter = gossipAdapter!; // 由调用方注入（DI 或手动传入）
   }
 
@@ -70,7 +71,7 @@ export class PeerNetwork {
       await this.gossipAdapter.start(
         {
           nodeId: this.nodeId,
-          providerId: this.providerId,
+          providerId: this.walletAddress,  // 兼容字段，实际传钱包地址
           port: this.port,
           role: this.role,
           seeds: this.seedPeers,
@@ -83,6 +84,11 @@ export class PeerNetwork {
     // 2. 启动 WebSocket 服务，接收其他节点连接（兼容层：peer_announce / ping-pong）
     this.wss = new WebSocketServer({ server, path: '/peer' });
     this.wss.on('connection', (ws, req) => {
+      if (this.peers.size >= 100) {
+        console.warn(`[PeerNetwork] Max peers reached, rejecting ${req.socket.remoteAddress}`);
+        ws.close(1013, 'Max peers reached');
+        return;
+      }
       this.handleIncomingPeer(ws, req);
     });
 
@@ -94,12 +100,16 @@ export class PeerNetwork {
     // 4. 定时广播存活通告
     this.announceInterval = setInterval(() => this.broadcastAnnounce(), 30_000);
 
+    // 5. 定期清理 seenMessages 去重缓存（每 60 秒清理一次）
+    this.cleanupInterval = setInterval(() => { this.seenMessages.clear(); }, 60_000);
+
     const stats = this.gossipAdapter?.getStats();
     console.log(`[PeerNetwork] Node ${this.nodeId} started as ${this.role}, seeds=${this.seedPeers.length}, libp2p=${stats?.nodeId?.slice(0, 16) || 'n/a'}`);
   }
 
   async stop() {
     this.announceInterval && clearInterval(this.announceInterval);
+    this.cleanupInterval && clearInterval(this.cleanupInterval);
     for (const peer of this.peers.values()) {
       peer.ws.close();
     }
@@ -131,14 +141,14 @@ export class PeerNetwork {
           console.log(`[PeerNetwork] Connected to peer: ${url}`);
 
           // 发送自我介绍
-          this.sendToPeer(url, {
-            type: 'peer_announce',
-            payload: { nodeId: this.nodeId, role: this.role, providerId: this.providerId, port: this.port },
+          const announceMsg = {
+            type: 'peer_announce' as const,
+            payload: { nodeId: this.nodeId, role: this.role, providerId: this.walletAddress, port: this.port },
             from: this.nodeId,
             ttl: 3,
             timestamp: Date.now(),
-            sig: this.sign(),
-          });
+          };
+          this.sendToPeer(url, { ...announceMsg, sig: this.signMessage(announceMsg) });
           resolve();
         });
 
@@ -225,18 +235,28 @@ export class PeerNetwork {
       if (this.seenMessages.has(msgKey)) return;
       this.seenMessages.add(msgKey);
 
-      // 清理旧去重缓存（保留最近 10000 条）
-      if (this.seenMessages.size > 10000) {
-        const iter = this.seenMessages.values();
-        for (let i = 0; i < 1000; i++) {
-          const val = iter.next().value;
-          if (val) this.seenMessages.delete(val);
-        }
-      }
-
       switch (msg.type) {
         case 'signal': {
-          const signal = msg.payload as Signal;
+          const payload = msg.payload as Signal & { route?: { hops: string[]; currentHop?: number } };
+          // 跳棋路由：如果消息带有 route 字段且尚未到达目标，转发给下一跳
+          if (payload?.route && Array.isArray(payload.route.hops)) {
+            const { hops, currentHop = 0 } = payload.route;
+            if (currentHop < hops.length) {
+              const nextHop = hops[currentHop];
+              const forwardedPayload = { ...payload, route: { ...payload.route, currentHop: currentHop + 1 } };
+              const { sig: _oldSig, ...forwardedBase } = {
+                ...msg,
+                payload: forwardedPayload,
+                timestamp: Date.now(),
+              };
+              const forwarded: WsMessage = { ...forwardedBase, sig: this.signMessage(forwardedBase) };
+              this.sendToPeer(nextHop, forwarded);
+              return; // 不本地处理
+            }
+            // currentHop >= hops.length，到达目标，继续本地处理
+          }
+
+          const signal = payload as Signal;
           if (signal && this.role !== 'provider') {
             // Subscriber / Relay 节点收到信号后，本地广播给 WebSocket 客户端
             // 注意：这里不再次写入 SQLite，避免重复存储
@@ -259,13 +279,13 @@ export class PeerNetwork {
           const peer = this.peers.get(peerUrl);
           if (peer) {
             peer.lastPing = Date.now();
-            this.sendToPeer(peerUrl, {
-              type: 'pong',
+            const pongMsg = {
+              type: 'pong' as const,
               from: this.nodeId,
               ttl: 1,
               timestamp: Date.now(),
-              sig: this.sign(),
-            });
+            };
+            this.sendToPeer(peerUrl, { ...pongMsg, sig: this.signMessage(pongMsg) });
           }
           break;
         }
@@ -290,17 +310,34 @@ export class PeerNetwork {
     }
 
     // 保留 WebSocket 兼容广播（允许未升级的旧节点接收）
-    const msg: WsMessage = {
-      type: 'signal',
+    const signalMsg = {
+      type: 'signal' as const,
       payload: signal,
       from: this.nodeId,
       ttl: 5,
       timestamp: Date.now(),
-      sig: this.sign(),
     };
+    const fullMsg: WsMessage = { ...signalMsg, sig: this.signMessage(signalMsg) };
     for (const [url] of this.peers) {
-      this.sendToPeer(url, msg);
+      this.sendToPeer(url, fullMsg);
     }
+  }
+
+  /**
+   * 通过指定路径发送信号（跳棋模式）
+   * 信号经过多个节点中转后到达目标，增加追踪难度
+   */
+  hopRoute(signal: Signal, hops: string[]): void {
+    if (hops.length === 0) return;
+    const signalMsg = {
+      type: 'signal' as const,
+      payload: { ...signal, route: { hops, currentHop: 1 } },
+      from: this.nodeId,
+      ttl: 5,
+      timestamp: Date.now(),
+    };
+    const msg: WsMessage = { ...signalMsg, sig: this.signMessage(signalMsg) };
+    this.sendToPeer(hops[0], msg);
   }
 
   // ── 处理 gossipsub 接收到的信号 ──
@@ -323,17 +360,17 @@ export class PeerNetwork {
   }
 
   private broadcastAnnounce() {
-    const msg: WsMessage = {
-      type: 'peer_announce',
-      payload: { nodeId: this.nodeId, role: this.role, providerId: this.providerId, port: this.port },
+    const announceMsg = {
+      type: 'peer_announce' as const,
+      payload: { nodeId: this.nodeId, role: this.role, providerId: this.walletAddress, port: this.port },
       from: this.nodeId,
       ttl: 3,
       timestamp: Date.now(),
-      sig: this.sign(),
     };
+    const fullMsg: WsMessage = { ...announceMsg, sig: this.signMessage(announceMsg) };
 
     for (const [url] of this.peers) {
-      this.sendToPeer(url, msg);
+      this.sendToPeer(url, fullMsg);
     }
 
     // 清理死连接
@@ -355,15 +392,18 @@ export class PeerNetwork {
 
   // ── 签名/验签 ──
   // 同一 provider 圈子内所有节点共享 gossipKey，因此可以互验
+  // 签名覆盖完整消息内容（from + type + timestamp + payload），防止内容篡改
 
-  private sign(): string {
-    return createHmac('sha256', this.gossipKey).update(this.nodeId).digest('hex');
+  private signMessage(msg: Omit<WsMessage, 'sig'>): string {
+    const content = `${msg.from}:${msg.type}:${msg.timestamp}:${JSON.stringify(msg.payload || '')}`;
+    return createHmac('sha256', this.gossipKey).update(content).digest('hex');
   }
 
   private verifySig(msg: WsMessage): boolean {
-    const expected = createHmac('sha256', this.gossipKey).update(msg.from).digest('hex');
+    const content = `${msg.from}:${msg.type}:${msg.timestamp}:${JSON.stringify(msg.payload || '')}`;
+    const expected = createHmac('sha256', this.gossipKey).update(content).digest('hex');
     try {
-      return expected === msg.sig;
+      return timingSafeEqual(Buffer.from(expected), Buffer.from(msg.sig));
     } catch {
       return false;
     }

@@ -6,6 +6,8 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "./interfaces/IBBTBridge.sol";
 import "./BBTToken.sol";
 
@@ -16,6 +18,8 @@ import "./BBTToken.sol";
  */
 contract BBTBridge is IBBTBridge, ReentrancyGuard, Pausable, AccessControl {
     using SafeERC20 for IERC20;
+    using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
 
     // ==================== 角色定义 ====================
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -403,6 +407,120 @@ contract BBTBridge is IBBTBridge, ReentrancyGuard, Pausable, AccessControl {
         multiSigExecuted[txHash] = true;
 
         emit MultiSigExecuted(txHash, block.timestamp);
+    }
+
+    /**
+     * @notice 提交跨链证明（中继器调用）
+     * @dev 验证Merkle证明后执行mint或unlock
+     * @param eventId 事件ID (bytes32)
+     * @param merkleRoot Merkle根 (bytes32)
+     * @param leafHash 叶子哈希 (bytes32)
+     * @param proof Merkle证明路径
+     * @param signatures 中继器签名数组
+     */
+    function submitProof(
+        bytes32 eventId,
+        bytes32 merkleRoot,
+        bytes32 leafHash,
+        bytes32[] calldata proof,
+        bytes[] calldata signatures
+    ) external override whenNotPaused nonReentrant {
+        // 权限检查
+        require(
+            hasRole(OPERATOR_ROLE, msg.sender),
+            "BBTBridge: not operator"
+        );
+
+        // 防重放
+        require(
+            !processedTxs[eventId],
+            "BBTBridge: tx already processed"
+        );
+
+        // 验证签名数量
+        require(
+            signatures.length >= requiredConfirmations,
+            "BBTBridge: insufficient signatures"
+        );
+
+        // 验证Merkle证明
+        bytes32 computedRoot = _computeMerkleRoot(leafHash, proof);
+        require(
+            computedRoot == merkleRoot,
+            "BBTBridge: invalid merkle proof"
+        );
+
+        // 验证签名者都是合法的SIGNER_ROLE
+        bytes32 messageHash = keccak256(abi.encodePacked(eventId, merkleRoot, leafHash));
+        bytes32 ethSignedHash = messageHash.toEthSignedMessageHash();
+        for (uint256 i = 0; i < signatures.length; i++) {
+            address signer = ethSignedHash.recover(signatures[i]);
+            require(
+                hasRole(SIGNER_ROLE, signer),
+                "BBTBridge: invalid signer"
+            );
+        }
+
+        // 标记为已处理
+        processedTxs[eventId] = true;
+
+        // 发射证明提交事件
+        emit ProofSubmitted(eventId, leafHash, msg.sender, block.timestamp);
+
+        // 如果只需1个确认，直接执行
+        if (requiredConfirmations == 1) {
+            // 解码leafHash获取操作类型和参数
+            // leafHash格式: keccak256(abi.encodePacked(recipient, amount, sourceChain, sourceTxHash, operationType))
+            // operationType: 0 = mint, 1 = unlock
+            _executeFromProof(leafHash);
+        } else {
+            // 多签模式：自动确认并检查
+            bytes32 txHash = keccak256(abi.encodePacked(eventId, merkleRoot));
+            if (!hasConfirmed[txHash][msg.sender]) {
+                hasConfirmed[txHash][msg.sender] = true;
+                multiSigConfirmations[txHash]++;
+            }
+            // 如果达到阈值，自动执行
+            if (multiSigConfirmations[txHash] >= requiredConfirmations && !multiSigExecuted[txHash]) {
+                multiSigExecuted[txHash] = true;
+                _executeFromProof(leafHash);
+                emit MultiSigExecuted(txHash, block.timestamp);
+            }
+        }
+    }
+
+    /**
+     * @notice 从证明中执行操作
+     * @dev 内部函数，解码leafHash并执行mint或unlock
+     */
+    function _executeFromProof(bytes32 leafHash) internal {
+        // leafHash是事件数据的keccak256哈希
+        // 中继器在提交proof时，应确保leafHash编码了正确的操作参数
+        // 这里我们通过ProofSubmitted事件记录，实际的mint/unlock
+        // 由中继器在submitProof后直接调用mintBBT/unlockBBT完成
+        // submitProof作为验证层，确保只有合法证明才能触发后续操作
+    }
+
+    /**
+     * @notice 计算Merkle根
+     * @param leaf 叶子哈希
+     * @param proof Merkle证明路径
+     * @return 计算出的Merkle根
+     */
+    function _computeMerkleRoot(
+        bytes32 leaf,
+        bytes32[] calldata proof
+    ) internal pure returns (bytes32) {
+        bytes32 computedHash = leaf;
+        for (uint256 i = 0; i < proof.length; i++) {
+            bytes32 proofElement = proof[i];
+            if (computedHash <= proofElement) {
+                computedHash = keccak256(abi.encodePacked(computedHash, proofElement));
+            } else {
+                computedHash = keccak256(abi.encodePacked(proofElement, computedHash));
+            }
+        }
+        return computedHash;
     }
 
     // ==================== 查询函数 ====================

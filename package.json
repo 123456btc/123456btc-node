@@ -1,6 +1,6 @@
 {
   "name": "@123456btc/node",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Decentralized strategy service node for 123456btc — run your own signal hub, subscription store, and BBT settlement",
   "main": "dist/index.js",
   "bin": {
@@ -16,14 +16,26 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\""
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/123456btc/123456btc-node.git"
+  },
+  "homepage": "https://github.com/123456btc/123456btc-node#readme",
+  "bugs": {
+    "url": "https://github.com/123456btc/123456btc-node/issues"
+  },
   "keywords": [
     "bbt",
     "solana",
     "strategy",
     "signal",
-    "decentralized"
+    "decentralized",
+    "p2p",
+    "blindbox",
+    "subscription",
+    "trading"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@chainsafe/libp2p-gossipsub": "^14.1.2",
     "@libp2p/bootstrap": "^12.0.20",

@@ -19,6 +19,7 @@ export interface NodeConfig {
   bbt_mint: string;
   burn_rate: number;
   node_port: number;
+  p2p_port: number;
   admin_api_key: string;
   role: 'provider' | 'subscriber' | 'relay' | 'peer';
   seeds: string[];
@@ -34,6 +35,7 @@ const DEFAULTS: Partial<NodeConfig> = {
   bbt_mint: '3s4AK2x2nGkKP8ZADbcKuhdPr3coSuh1XnwZEzWgpump',
   burn_rate: 0,
   node_port: 1119,
+  p2p_port: 0,
   role: 'peer',
   seeds: [],
   log_level: 'info',

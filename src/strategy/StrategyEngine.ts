@@ -273,6 +273,15 @@ export class StrategyEngine {
       updated_at: now,
     };
 
+    // 持久化到 SQLite
+    if (this.store && typeof this.store.createStrategyAgentBinding === 'function') {
+      try {
+        this.store.createStrategyAgentBinding(binding);
+      } catch (err: any) {
+        this.logger.warn('Failed to persist agent binding to store', { error: err.message });
+      }
+    }
+
     // 存储
     if (!this.agentBindings.has(strategyId)) {
       this.agentBindings.set(strategyId, []);
@@ -302,6 +311,14 @@ export class StrategyEngine {
     binding.status = 'revoked';
     binding.updated_at = Date.now();
 
+    if (this.store && typeof this.store.removeStrategyAgentBinding === 'function') {
+      try {
+        this.store.removeStrategyAgentBinding(agentId);
+      } catch (err: any) {
+        this.logger.warn('Failed to update agent binding in store', { error: err.message });
+      }
+    }
+
     this.logger.info('Agent unbound', { agentId, strategyId: binding.strategy_id });
     return true;
   }
@@ -317,6 +334,15 @@ export class StrategyEngine {
 
     binding.status = 'paused';
     binding.updated_at = Date.now();
+
+    if (this.store && typeof this.store.updateStrategyAgentBindingStatus === 'function') {
+      try {
+        this.store.updateStrategyAgentBindingStatus(agentId, 'paused');
+      } catch (err: any) {
+        this.logger.warn('Failed to update agent binding status in store', { error: err.message });
+      }
+    }
+
     return true;
   }
 
@@ -331,6 +357,15 @@ export class StrategyEngine {
 
     binding.status = 'active';
     binding.updated_at = Date.now();
+
+    if (this.store && typeof this.store.updateStrategyAgentBindingStatus === 'function') {
+      try {
+        this.store.updateStrategyAgentBindingStatus(agentId, 'active');
+      } catch (err: any) {
+        this.logger.warn('Failed to update agent binding status in store', { error: err.message });
+      }
+    }
+
     return true;
   }
 
@@ -338,7 +373,19 @@ export class StrategyEngine {
    * 获取策略的所有 Agent 绑定
    */
   getStrategyAgents(strategyId: string): AgentBinding[] {
-    return (this.agentBindings.get(strategyId) || []).filter((b) => b.status === 'active');
+    let fromStore: AgentBinding[] = [];
+    if (this.store && typeof this.store.getStrategyAgents === 'function') {
+      try {
+        fromStore = this.store.getStrategyAgents(strategyId);
+      } catch (err: any) {
+        this.logger.warn('Failed to read strategy agents from store', { error: err.message });
+      }
+    }
+    const fromMemory = (this.agentBindings.get(strategyId) || []).filter((b) => b.status === 'active');
+    const merged = new Map<string, AgentBinding>();
+    for (const b of fromStore) merged.set(b.agent_id, b);
+    for (const b of fromMemory) merged.set(b.agent_id, b);
+    return Array.from(merged.values());
   }
 
   /**
@@ -413,14 +460,35 @@ export class StrategyEngine {
    * 获取所有捆绑包
    */
   getBundleProducts(): BundleProduct[] {
-    return Array.from(this.bundles.values()).filter((b) => b.status === 'active');
+    const memoryBundles = Array.from(this.bundles.values()).filter((b) => b.status === 'active');
+    if (this.store && typeof this.store.getBundleProducts === 'function') {
+      try {
+        const dbBundles = this.store.getBundleProducts();
+        const map = new Map<string, BundleProduct>();
+        for (const b of dbBundles) map.set(b.id, b);
+        for (const b of memoryBundles) map.set(b.id, b);
+        return Array.from(map.values());
+      } catch (err: any) {
+        this.logger.warn('Failed to read bundle products from store', { error: err.message });
+      }
+    }
+    return memoryBundles;
   }
 
   /**
    * 获取单个捆绑包
    */
   getBundle(bundleId: string): BundleProduct | undefined {
-    return this.bundles.get(bundleId);
+    const memory = this.bundles.get(bundleId);
+    if (memory) return memory;
+    if (this.store && typeof this.store.getBundleProduct === 'function') {
+      try {
+        return this.store.getBundleProduct(bundleId);
+      } catch (err: any) {
+        this.logger.warn('Failed to read bundle product from store', { error: err.message });
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -457,6 +525,14 @@ export class StrategyEngine {
     };
 
     this.bundles.set(bundle.id, bundle);
+
+    if (this.store && typeof this.store.createBundleProduct === 'function') {
+      try {
+        this.store.createBundleProduct(bundle);
+      } catch (err: any) {
+        this.logger.warn('Failed to persist bundle product to store', { error: err.message });
+      }
+    }
 
     this.logger.info('Bundle created', {
       bundleId: bundle.id,
@@ -508,6 +584,16 @@ export class StrategyEngine {
       );
       if (existingNft) {
         return { success: false, error: 'Transaction already processed' };
+      }
+      if (this.store && typeof this.store.getBundlePurchaseByTx === 'function') {
+        try {
+          const existingPurchase = this.store.getBundlePurchaseByTx(txSignature);
+          if (existingPurchase) {
+            return { success: false, error: 'Transaction already processed' };
+          }
+        } catch (err: any) {
+          this.logger.warn('Failed to check bundle purchase in store', { error: err.message });
+        }
       }
     }
 
@@ -564,6 +650,38 @@ export class StrategyEngine {
 
     // 4. 更新销售计数
     bundle.sold_count++;
+
+    if (this.store && typeof this.store.updateBundleSoldCount === 'function') {
+      try {
+        this.store.updateBundleSoldCount(bundle.id, bundle.sold_count);
+      } catch (err: any) {
+        this.logger.warn('Failed to update bundle sold count in store', { error: err.message });
+      }
+    }
+
+    // 4b. 记录购买
+    if (this.store && typeof this.store.purchaseBundle === 'function') {
+      try {
+        this.store.purchaseBundle({
+          id: `purchase_${Date.now().toString(36)}_${randomBytes(4).toString('hex')}`,
+          bundle_id: bundleId,
+          wallet: buyerWallet,
+          user_id: userId,
+          payment_method: paymentMethod,
+          tx_signature: txSignature,
+          nft_id: nft?.id,
+          nft_mint: nft?.mint_address,
+          tier: bundle.nft_tier,
+          subscription_days: bundle.bonus_days,
+          expires_at: nft?.expires_at,
+          blindbox_credits: bundle.blindbox_count,
+          subscription_ids: createdSubscriptions,
+          created_at: Date.now(),
+        });
+      } catch (err: any) {
+        this.logger.warn('Failed to record bundle purchase in store', { error: err.message });
+      }
+    }
 
     // 5. 记录账单
     if (this.store) {
@@ -1164,6 +1282,17 @@ export class StrategyEngine {
         created_at: now,
       };
       this.bundles.set(bundle.id, bundle);
+
+      if (this.store && typeof this.store.createBundleProduct === 'function') {
+        try {
+          const existing = this.store.getBundleProduct(bundle.id);
+          if (!existing) {
+            this.store.createBundleProduct(bundle);
+          }
+        } catch (err: any) {
+          this.logger.warn('Failed to seed default bundle to store', { error: err.message });
+        }
+      }
     }
   }
 

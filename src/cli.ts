@@ -73,6 +73,7 @@ program
   .option('--rpc <url>', 'Solana RPC endpoint', 'https://api.mainnet-beta.solana.com')
   .option('--bbt-mint <mint>', 'BBT token mint address', '3s4AK2x2nGkKP8ZADbcKuhdPr3coSuh1XnwZEzWgpump')
   .option('--port <port>', 'Node HTTP/WebSocket port', '1119')
+  .option('--p2p-port <port>', 'libp2p P2P port (0 = random)', '0')
   .option('--seeds <urls>', 'Comma-separated seed peer URLs')
   .option('--settlement-mode <mode>', 'Settlement mode: memo | escrow', 'memo')
   .action((opts) => {
@@ -89,6 +90,7 @@ program
       bbt_mint: opts.bbtMint,
       burn_rate: 0,
       node_port: parseInt(opts.port, 10),
+      p2p_port: parseInt(opts.p2pPort, 10),
       admin_api_key: randomBytes(24).toString('base64url'),
       role: 'peer' as NodeRole,
       seeds: opts.seeds ? String(opts.seeds).split(',') : [],
@@ -103,6 +105,7 @@ program
     console.log(`  Role:           ${config.role}`);
     console.log(`  RPC:            ${config.solana_rpc}`);
     console.log(`  Port:           ${config.node_port}`);
+    console.log(`  P2P Port:       ${config.p2p_port}`);
     console.log(`  Seeds:          ${config.seeds.join(', ') || 'none'}`);
     console.log(`  Settlement:     ${config.settlement_mode}`);
     console.log(`  Config:         ${CONFIG_PATH}`);
@@ -211,6 +214,7 @@ program
 
     const config = loadConfig();
     const port = opts.port ? parseInt(opts.port, 10) : config.node_port;
+    const p2pPort = config.p2p_port ?? 0;
     const role = (config.role || 'provider') as NodeRole;
 
     const store = await SubscriptionStore.create(path.join(DATA_DIR, 'node.db'));
@@ -254,7 +258,7 @@ program
 
     // 启动 P2P 网络（libp2p-gossipsub + WebSocket 兼容层）
     const gossipAdapter = new GossipAdapter(logger);
-    const peerNetwork = new PeerNetwork(role, config.provider_id, port, hub, config.seeds || [], gossipAdapter);
+    const peerNetwork = new PeerNetwork(role, config.provider_id, port, hub, config.seeds || [], gossipAdapter, p2pPort);
     await peerNetwork.start(httpServer);
 
     // 启动 Telegram Bot（如配置了 TOKEN）
@@ -296,6 +300,7 @@ program
       console.log(`║ Role:     ${role.padEnd(34)} ║`);
       console.log(`║ Provider: ${config.name.padEnd(34)} ║`);
       console.log(`║ Port:     ${String(port).padEnd(34)} ║`);
+      console.log(`║ P2P Port: ${String(p2pPort || 'random').padEnd(34)} ║`);
       console.log(`║ Peers:    ${String(peerNetwork.getPeerCount()).padEnd(34)} ║`);
       console.log(`║ Wallet:   ${config.wallet_address.slice(0, 20).padEnd(34)} ║`);
       console.log('╚════════════════════════════════════════════╝');
@@ -453,7 +458,8 @@ agentCmd
   .option('--endpoint <url>', 'Node API endpoint URL')
   .action(async (opts) => {
     const logger = new Logger();
-    const manager = new AgentIDManager(logger);
+    const store = await SubscriptionStore.create(path.join(DATA_DIR, 'node.db'));
+    const manager = new AgentIDManager(logger, undefined, store);
 
     let displayName = opts.name;
     if (!displayName) {
@@ -500,6 +506,8 @@ agentCmd
     } catch (err) {
       console.error('Registration failed:', (err as Error).message);
       process.exit(1);
+    } finally {
+      store.close();
     }
   });
 
@@ -509,11 +517,11 @@ agentCmd
   .description('View Agent status and reputation')
   .option('--id <agentId>', 'Agent ID')
   .option('--wallet <address>', 'Lookup by wallet address')
-  .action((opts) => {
+  .action(async (opts) => {
     const logger = new Logger();
-    const manager = new AgentIDManager(logger);
+    const store = await SubscriptionStore.create(path.join(DATA_DIR, 'node.db'));
+    const manager = new AgentIDManager(logger, undefined, store);
 
-    // Demo: register a sample agent so status has something to show
     let agent;
     if (opts.id) {
       agent = manager.getAgent(opts.id);
@@ -568,6 +576,7 @@ agentCmd
       console.log('    Age bonus:          ' + factors.age_bonus + '%');
     }
     console.log('');
+    store.close();
   });
 
 // ══════════════════════════════════════════════════════════════
@@ -756,9 +765,10 @@ strategyCmd
   .option('--type <type>', 'Agent type: ai_llm | rule_based | hybrid', 'ai_llm')
   .option('--mode <mode>', 'Execution mode: auto | semi_auto | manual', 'auto')
   .option('--fee-share <bps>', 'Agent fee share in bps (e.g., 500 = 5%)', '100')
-  .action((opts) => {
+  .action(async (opts) => {
     const logger = new Logger();
-    const engine = new StrategyEngine(logger);
+    const store = await SubscriptionStore.create(path.join(DATA_DIR, 'node.db'));
+    const engine = new StrategyEngine(logger, store);
 
     try {
       const binding = engine.bindAgent(
@@ -786,6 +796,8 @@ strategyCmd
     } catch (err) {
       console.error('Bind failed:', (err as Error).message);
       process.exit(1);
+    } finally {
+      store.close();
     }
   });
 
@@ -794,9 +806,10 @@ strategyCmd
   .command('agents')
   .description('List agents bound to a strategy')
   .requiredOption('--strategy-id <id>', 'Strategy ID')
-  .action((opts) => {
+  .action(async (opts) => {
     const logger = new Logger();
-    const engine = new StrategyEngine(logger);
+    const store = await SubscriptionStore.create(path.join(DATA_DIR, 'node.db'));
+    const engine = new StrategyEngine(logger, store);
 
     const agents = engine.getStrategyAgents(opts.strategyId);
 
@@ -810,15 +823,17 @@ strategyCmd
       }
     }
     console.log('');
+    store.close();
   });
 
 // ── strategy bundles ──
 strategyCmd
   .command('bundles')
   .description('List available bundle products')
-  .action(() => {
+  .action(async () => {
     const logger = new Logger();
-    const engine = new StrategyEngine(logger);
+    const store = await SubscriptionStore.create(path.join(DATA_DIR, 'node.db'));
+    const engine = new StrategyEngine(logger, store);
 
     const bundles = engine.getBundleProducts();
 
@@ -838,6 +853,7 @@ strategyCmd
       }
     }
     console.log('');
+    store.close();
   });
 
 // ── strategy bundle (purchase) ──
@@ -851,7 +867,8 @@ strategyCmd
   .option('--tx <signature>', 'On-chain transaction signature (if already paid)')
   .action(async (opts) => {
     const logger = new Logger();
-    const engine = new StrategyEngine(logger);
+    const store = await SubscriptionStore.create(path.join(DATA_DIR, 'node.db'));
+    const engine = new StrategyEngine(logger, store);
 
     try {
       const result = await engine.purchaseBundle(
@@ -884,6 +901,8 @@ strategyCmd
     } catch (err) {
       console.error('Purchase failed:', (err as Error).message);
       process.exit(1);
+    } finally {
+      store.close();
     }
   });
 

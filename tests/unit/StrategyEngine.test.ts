@@ -89,6 +89,17 @@ function createMockStore() {
     createBilling: vi.fn((data: any) => {
       billings.push({ ...data, id: `bill_${billings.length}`, created_at: Date.now() });
     }),
+    createStrategyAgentBinding: vi.fn(),
+    getStrategyAgents: vi.fn(() => []),
+    removeStrategyAgentBinding: vi.fn(),
+    updateStrategyAgentBindingStatus: vi.fn(),
+    createBundleProduct: vi.fn(),
+    getBundleProducts: vi.fn(() => []),
+    getBundleProduct: vi.fn(),
+    updateBundleSoldCount: vi.fn(),
+    purchaseBundle: vi.fn(),
+    getBundlePurchases: vi.fn(() => []),
+    getBundlePurchaseByTx: vi.fn(),
     // helper for tests to register a strategy
     _addStrategy: (id: string, data: any) => strategies.set(id, { id, ...data }),
     _getBillings: () => billings,

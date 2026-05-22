@@ -32,7 +32,7 @@ FROM node:20-alpine
 # Metadata
 LABEL maintainer="123456btc" \
       description="123456btc-node — Decentralized strategy service node" \
-      version="0.1.0"
+      version="0.2.0"
 
 # Security: install only runtime OS deps, no package manager
 RUN apk add --no-cache tini curl && \
@@ -44,12 +44,9 @@ WORKDIR /app
 RUN addgroup -g 1001 -S bbt && \
     adduser -S bbt -u 1001 -G bbt -h /app
 
-# Copy dependency manifests and install production-only deps
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-
-# Copy built artifacts from builder
+# Copy built artifacts and node_modules from builder
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy static assets for web dashboard
 COPY public ./public

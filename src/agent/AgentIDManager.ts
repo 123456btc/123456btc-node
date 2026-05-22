@@ -143,8 +143,12 @@ export class AgentIDManager {
   constructor(
     private logger: Logger,
     private connection?: Connection,
+    private store?: any,
   ) {
     this.nftConfig = { ...DEFAULT_BOT_NFT_CONFIG };
+    if (!this.store) {
+      this.logger.warn('AgentIDManager running in memory-only mode — data will be lost on restart. Pass a SubscriptionStore for persistence.');
+    }
   }
 
   // ═══════════════════════════════════════════════
@@ -187,6 +191,19 @@ export class AgentIDManager {
       }
     }
 
+    // 1b. 防重复注册（SQLite）
+    if (this.store) {
+      try {
+        const existingStore = this.store.getAgentByWallet(input.wallet_address);
+        if (existingStore && existingStore.status !== 'banned') {
+          throw new Error(`Wallet already registered as agent: ${existingStore.agent_id}`);
+        }
+      } catch (err: any) {
+        if (err.message?.includes('already registered')) throw err;
+        this.logger.warn('Failed to check store for duplicate agent', { error: err.message });
+      }
+    }
+
     // 2. 签名验证（防伪造注册）
     if (!this.verifyRegistrationSignature(input)) {
       throw new Error('Invalid registration signature');
@@ -222,6 +239,32 @@ export class AgentIDManager {
     // 6. 存储元数据到 IPFS（如果有）
     if (input.metadata) {
       agent.metadata_uri = this.buildMetadataUri(input.metadata, agentId);
+    }
+
+    // 6b. 持久化到 SQLite
+    if (this.store) {
+      try {
+        this.store.createAgent({
+          agent_id: agentId,
+          wallet_address: input.wallet_address,
+          display_name: input.display_name,
+          status: agent.status,
+          reputation_score: agent.reputation_score,
+          successful_trades: agent.successful_trades,
+          total_trades: agent.total_trades,
+          accurate_signals: agent.accurate_signals,
+          total_signals: agent.total_signals,
+          uptime_hours: agent.uptime_hours,
+          bbt_staked: agent.bbt_staked,
+          bot_nft_mint: agent.bot_nft_mint,
+          metadata: agent.metadata_uri ? { metadata_uri: agent.metadata_uri } : undefined,
+          created_at: agent.created_at,
+          updated_at: agent.updated_at,
+          last_active_at: agent.last_active_at,
+        });
+      } catch (err: any) {
+        this.logger.warn('Failed to persist agent to store', { error: err.message });
+      }
     }
 
     // 7. 索引
@@ -395,6 +438,19 @@ export class AgentIDManager {
       agent.updated_at = Date.now();
       this.nftIndex.set(mintAddress, agentId);
 
+      if (this.store) {
+        try {
+          this.store.updateAgent(agentId, {
+            bot_nft_mint: mintAddress,
+            bbt_staked: stakeAmountBbt,
+            status: 'active',
+            updated_at: agent.updated_at,
+          });
+        } catch (err: any) {
+          this.logger.warn('Failed to update agent NFT in store', { error: err.message });
+        }
+      }
+
       this.logger.info('Bot ID NFT minted', {
         agentId,
         mint: mintAddress.slice(0, 8) + '...',
@@ -431,6 +487,17 @@ export class AgentIDManager {
     agent.metadata_uri = uri;
     agent.updated_at = Date.now();
 
+    if (this.store) {
+      try {
+        this.store.updateAgent(agentId, {
+          metadata: { metadata_uri: uri },
+          updated_at: agent.updated_at,
+        });
+      } catch (err: any) {
+        this.logger.warn('Failed to update agent metadata in store', { error: err.message });
+      }
+    }
+
     this.logger.info('Agent metadata updated', { agentId, uri });
     return uri;
   }
@@ -464,6 +531,20 @@ export class AgentIDManager {
     agent.updated_at = Date.now();
 
     this.recalculateReputation(agent);
+
+    if (this.store) {
+      try {
+        this.store.updateAgent(agentId, {
+          total_trades: agent.total_trades,
+          successful_trades: agent.successful_trades,
+          last_active_at: agent.last_active_at,
+          updated_at: agent.updated_at,
+          reputation_score: agent.reputation_score,
+        });
+      } catch (err: any) {
+        this.logger.warn('Failed to update agent trade in store', { error: err.message });
+      }
+    }
   }
 
   /**
@@ -479,6 +560,20 @@ export class AgentIDManager {
     agent.updated_at = Date.now();
 
     this.recalculateReputation(agent);
+
+    if (this.store) {
+      try {
+        this.store.updateAgent(agentId, {
+          total_signals: agent.total_signals,
+          accurate_signals: agent.accurate_signals,
+          last_active_at: agent.last_active_at,
+          updated_at: agent.updated_at,
+          reputation_score: agent.reputation_score,
+        });
+      } catch (err: any) {
+        this.logger.warn('Failed to update agent signal in store', { error: err.message });
+      }
+    }
   }
 
   /**
@@ -493,6 +588,19 @@ export class AgentIDManager {
     agent.updated_at = Date.now();
 
     this.recalculateReputation(agent);
+
+    if (this.store) {
+      try {
+        this.store.updateAgent(agentId, {
+          uptime_hours: agent.uptime_hours,
+          last_active_at: agent.last_active_at,
+          updated_at: agent.updated_at,
+          reputation_score: agent.reputation_score,
+        });
+      } catch (err: any) {
+        this.logger.warn('Failed to update agent uptime in store', { error: err.message });
+      }
+    }
   }
 
   /**
@@ -549,6 +657,18 @@ export class AgentIDManager {
       });
     }
 
+    if (this.store) {
+      try {
+        this.store.updateAgent(agentId, {
+          reputation_score: agent.reputation_score,
+          status: agent.status,
+          updated_at: agent.updated_at,
+        });
+      } catch (err: any) {
+        this.logger.warn('Failed to update agent penalty in store', { error: err.message });
+      }
+    }
+
     this.logger.warn('Agent penalized', { agentId, points, reason, newScore: agent.reputation_score });
   }
 
@@ -581,6 +701,18 @@ export class AgentIDManager {
         agent.status = 'suspended';
         this.logger.warn('Agent suspended due to inactivity', { agentId: agent.agent_id });
       }
+
+      if (this.store) {
+        try {
+          this.store.updateAgent(agent.agent_id, {
+            reputation_score: agent.reputation_score,
+            status: agent.status,
+            updated_at: agent.updated_at,
+          });
+        } catch (err: any) {
+          this.logger.warn('Failed to update agent decay in store', { error: err.message });
+        }
+      }
     }
 
     if (decayedCount > 0) {
@@ -597,6 +729,17 @@ export class AgentIDManager {
    * 按 Agent ID 查询
    */
   getAgent(agentId: string): AgentProfile | undefined {
+    if (this.store) {
+      try {
+        const fromStore = this.store.getAgent(agentId);
+        if (fromStore) {
+          this.agents.set(agentId, fromStore);
+          return fromStore;
+        }
+      } catch (err: any) {
+        this.logger.warn('Failed to read agent from store', { error: err.message });
+      }
+    }
     return this.agents.get(agentId);
   }
 
@@ -604,6 +747,21 @@ export class AgentIDManager {
    * 按钱包地址查询
    */
   getAgentByWallet(walletAddress: string): AgentProfile | undefined {
+    if (this.store) {
+      try {
+        const fromStore = this.store.getAgentByWallet(walletAddress);
+        if (fromStore) {
+          this.agents.set(fromStore.agent_id, fromStore);
+          this.walletIndex.set(walletAddress, fromStore.agent_id);
+          if (fromStore.bot_nft_mint) {
+            this.nftIndex.set(fromStore.bot_nft_mint, fromStore.agent_id);
+          }
+          return fromStore;
+        }
+      } catch (err: any) {
+        this.logger.warn('Failed to read agent from store', { error: err.message });
+      }
+    }
     const agentId = this.walletIndex.get(walletAddress);
     return agentId ? this.agents.get(agentId) : undefined;
   }
@@ -620,6 +778,21 @@ export class AgentIDManager {
    * 列出所有 Agent
    */
   listAgents(status?: AgentStatus): AgentProfile[] {
+    if (this.store) {
+      try {
+        const fromStore = this.store.listAgents(status);
+        for (const a of fromStore) {
+          this.agents.set(a.agent_id, a);
+          this.walletIndex.set(a.wallet_address, a.agent_id);
+          if (a.bot_nft_mint) {
+            this.nftIndex.set(a.bot_nft_mint, a.agent_id);
+          }
+        }
+        return fromStore;
+      } catch (err: any) {
+        this.logger.warn('Failed to list agents from store', { error: err.message });
+      }
+    }
     const agents = Array.from(this.agents.values());
     if (status) {
       return agents.filter((a) => a.status === status);
@@ -661,6 +834,18 @@ export class AgentIDManager {
 
     agent.status = 'active';
     agent.updated_at = Date.now();
+
+    if (this.store) {
+      try {
+        this.store.updateAgent(agentId, {
+          status: agent.status,
+          updated_at: agent.updated_at,
+        });
+      } catch (err: any) {
+        this.logger.warn('Failed to update agent reactivation in store', { error: err.message });
+      }
+    }
+
     this.logger.info('Agent reactivated', { agentId });
     return true;
   }
@@ -674,6 +859,18 @@ export class AgentIDManager {
 
     agent.status = 'banned';
     agent.updated_at = Date.now();
+
+    if (this.store) {
+      try {
+        this.store.updateAgent(agentId, {
+          status: agent.status,
+          updated_at: agent.updated_at,
+        });
+      } catch (err: any) {
+        this.logger.warn('Failed to update agent ban in store', { error: err.message });
+      }
+    }
+
     this.logger.warn('Agent banned', { agentId, reason });
     return true;
   }
@@ -745,6 +942,17 @@ export class AgentIDManager {
       agent.wallet_address = newOwnerWallet;
       this.walletIndex.set(newOwnerWallet, agentId);
       agent.updated_at = Date.now();
+
+      if (this.store) {
+        try {
+          this.store.updateAgent(agentId, {
+            wallet_address: newOwnerWallet,
+            updated_at: agent.updated_at,
+          });
+        } catch (err: any) {
+          this.logger.warn('Failed to update agent wallet in store', { error: err.message });
+        }
+      }
 
       this.logger.info('Bot ID NFT transferred', {
         agentId,
@@ -945,6 +1153,13 @@ export class AgentIDManager {
     avg_reputation: number;
     total_staked: number;
   } {
+    if (this.store) {
+      try {
+        return this.store.getAgentStatistics();
+      } catch (err: any) {
+        this.logger.warn('Failed to get agent stats from store', { error: err.message });
+      }
+    }
     const agents = Array.from(this.agents.values());
     const active = agents.filter((a) => a.status === 'active');
     const avgRep = agents.length > 0

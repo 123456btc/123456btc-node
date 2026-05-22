@@ -5,6 +5,7 @@
 
 import { createHmac, timingSafeEqual } from 'crypto';
 import { PublicKey } from '@solana/web3.js';
+import * as nacl from 'tweetnacl';
 import type { ProviderConfig } from '../types/index.js';
 
 export interface ProviderAuthResult {
@@ -75,8 +76,7 @@ export class AuthManager {
       const msgBytes = new TextEncoder().encode(msg);
       const sigBytes = Buffer.from(signature, 'base64');
 
-      // @ts-ignore — nacl.sign.detached.verify via PublicKey extension
-      const valid = pubKey.verify ? pubKey.verify(msgBytes, sigBytes) : false;
+      const valid = nacl.sign.detached.verify(msgBytes, sigBytes, pubKey.toBytes());
       if (!valid) {
         return { valid: false, error: 'Invalid wallet signature' };
       }

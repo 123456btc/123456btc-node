@@ -55,6 +55,7 @@ export class PeerNetwork {
     private hub: SignalHub,
     private seedPeers: string[] = [],
     gossipAdapter?: GossipAdapter,
+    private p2pPort?: number,
   ) {
     this.nodeId = `${walletAddress}_${Date.now().toString(36)}`;
     // 每个节点用自己的钱包地址派生 gossip key
@@ -75,6 +76,7 @@ export class PeerNetwork {
           port: this.port,
           role: this.role,
           seeds: this.seedPeers,
+          p2pPort: this.p2pPort,
         },
         (msg) => this.handleGossipMessage(msg),
       );

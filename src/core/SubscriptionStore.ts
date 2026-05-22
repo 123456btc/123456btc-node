@@ -170,6 +170,83 @@ export class SubscriptionStore {
         unlock_at INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_stakes_wallet ON provider_stakes(wallet_address, status);
+
+      -- Agent 注册表
+      CREATE TABLE IF NOT EXISTS agents (
+        id TEXT PRIMARY KEY,
+        wallet_address TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        status TEXT DEFAULT 'active',
+        reputation_score INTEGER DEFAULT 500,
+        successful_trades INTEGER DEFAULT 0,
+        total_trades INTEGER DEFAULT 0,
+        accurate_signals INTEGER DEFAULT 0,
+        total_signals INTEGER DEFAULT 0,
+        uptime_hours REAL DEFAULT 0,
+        bbt_staked REAL DEFAULT 0,
+        bot_nft_mint TEXT,
+        metadata TEXT,
+        created_at INTEGER,
+        updated_at INTEGER,
+        last_active_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_agents_wallet ON agents(wallet_address);
+
+      -- 策略-Agent 绑定表
+      CREATE TABLE IF NOT EXISTS strategy_agents (
+        id TEXT PRIMARY KEY,
+        strategy_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        agent_wallet TEXT NOT NULL,
+        agent_type TEXT DEFAULT 'ai_llm',
+        execution_mode TEXT DEFAULT 'auto',
+        fee_share_bps INTEGER DEFAULT 100,
+        status TEXT DEFAULT 'active',
+        metadata TEXT,
+        created_at INTEGER,
+        updated_at INTEGER,
+        UNIQUE(strategy_id, agent_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_strategy_agents_strategy ON strategy_agents(strategy_id);
+      CREATE INDEX IF NOT EXISTS idx_strategy_agents_agent ON strategy_agents(agent_id);
+
+      -- Bundle 产品表
+      CREATE TABLE IF NOT EXISTS bundle_products (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        price_sol REAL,
+        price_bbt REAL,
+        blindbox_count INTEGER DEFAULT 0,
+        bonus_days INTEGER DEFAULT 0,
+        nft_tier TEXT,
+        strategy_ids TEXT,
+        max_supply INTEGER DEFAULT 0,
+        sold_count INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_bundle_products_status ON bundle_products(status);
+
+      -- Bundle 购买记录表
+      CREATE TABLE IF NOT EXISTS bundle_purchases (
+        id TEXT PRIMARY KEY,
+        bundle_id TEXT NOT NULL,
+        wallet TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        payment_method TEXT,
+        tx_signature TEXT,
+        nft_id TEXT,
+        nft_mint TEXT,
+        tier TEXT,
+        subscription_days INTEGER,
+        expires_at INTEGER,
+        blindbox_credits INTEGER DEFAULT 0,
+        subscription_ids TEXT,
+        created_at INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_bundle_purchases_bundle ON bundle_purchases(bundle_id);
+      CREATE INDEX IF NOT EXISTS idx_bundle_purchases_wallet ON bundle_purchases(wallet);
     `);
 
     this.migrateTables();
@@ -232,6 +309,81 @@ export class SubscriptionStore {
             unlock_at INTEGER
           )`);
           this.db.exec('CREATE INDEX IF NOT EXISTS idx_stakes_wallet ON provider_stakes(wallet_address, status)');
+        },
+      },
+      {
+        version: 5,
+        name: 'add_agents_strategy_agents_bundle_tables',
+        up: () => {
+          this.db.exec(`CREATE TABLE IF NOT EXISTS agents (
+            id TEXT PRIMARY KEY,
+            wallet_address TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            status TEXT DEFAULT 'active',
+            reputation_score INTEGER DEFAULT 500,
+            successful_trades INTEGER DEFAULT 0,
+            total_trades INTEGER DEFAULT 0,
+            accurate_signals INTEGER DEFAULT 0,
+            total_signals INTEGER DEFAULT 0,
+            uptime_hours REAL DEFAULT 0,
+            bbt_staked REAL DEFAULT 0,
+            bot_nft_mint TEXT,
+            metadata TEXT,
+            created_at INTEGER,
+            updated_at INTEGER,
+            last_active_at INTEGER
+          )`);
+          this.db.exec('CREATE INDEX IF NOT EXISTS idx_agents_wallet ON agents(wallet_address)');
+          this.db.exec(`CREATE TABLE IF NOT EXISTS strategy_agents (
+            id TEXT PRIMARY KEY,
+            strategy_id TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
+            agent_wallet TEXT NOT NULL,
+            agent_type TEXT DEFAULT 'ai_llm',
+            execution_mode TEXT DEFAULT 'auto',
+            fee_share_bps INTEGER DEFAULT 100,
+            status TEXT DEFAULT 'active',
+            metadata TEXT,
+            created_at INTEGER,
+            updated_at INTEGER,
+            UNIQUE(strategy_id, agent_id)
+          )`);
+          this.db.exec('CREATE INDEX IF NOT EXISTS idx_strategy_agents_strategy ON strategy_agents(strategy_id)');
+          this.db.exec('CREATE INDEX IF NOT EXISTS idx_strategy_agents_agent ON strategy_agents(agent_id)');
+          this.db.exec(`CREATE TABLE IF NOT EXISTS bundle_products (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            price_sol REAL,
+            price_bbt REAL,
+            blindbox_count INTEGER DEFAULT 0,
+            bonus_days INTEGER DEFAULT 0,
+            nft_tier TEXT,
+            strategy_ids TEXT,
+            max_supply INTEGER DEFAULT 0,
+            sold_count INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'active',
+            created_at INTEGER
+          )`);
+          this.db.exec('CREATE INDEX IF NOT EXISTS idx_bundle_products_status ON bundle_products(status)');
+          this.db.exec(`CREATE TABLE IF NOT EXISTS bundle_purchases (
+            id TEXT PRIMARY KEY,
+            bundle_id TEXT NOT NULL,
+            wallet TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            payment_method TEXT,
+            tx_signature TEXT,
+            nft_id TEXT,
+            nft_mint TEXT,
+            tier TEXT,
+            subscription_days INTEGER,
+            expires_at INTEGER,
+            blindbox_credits INTEGER DEFAULT 0,
+            subscription_ids TEXT,
+            created_at INTEGER
+          )`);
+          this.db.exec('CREATE INDEX IF NOT EXISTS idx_bundle_purchases_bundle ON bundle_purchases(bundle_id)');
+          this.db.exec('CREATE INDEX IF NOT EXISTS idx_bundle_purchases_wallet ON bundle_purchases(wallet)');
         },
       },
     ];
@@ -555,6 +707,276 @@ return this.db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(id);
   getTotalStakedBbt(): number {
     const row = this.db.prepare("SELECT COALESCE(SUM(amount_bbt), 0) as total FROM provider_stakes WHERE status = 'active'").get() as any;
     return row?.total || 0;
+  }
+
+  // ═══════════════════════════════════════════
+  // Agent
+  // ═══════════════════════════════════════════
+
+  createAgent(agent: any): any {
+    const stmt = this.db.prepare(`
+      INSERT INTO agents (id, wallet_address, display_name, status, reputation_score, successful_trades, total_trades, accurate_signals, total_signals, uptime_hours, bbt_staked, bot_nft_mint, metadata, created_at, updated_at, last_active_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      agent.agent_id || agent.id,
+      agent.wallet_address,
+      agent.display_name,
+      agent.status || 'active',
+      agent.reputation_score ?? 500,
+      agent.successful_trades ?? 0,
+      agent.total_trades ?? 0,
+      agent.accurate_signals ?? 0,
+      agent.total_signals ?? 0,
+      agent.uptime_hours ?? 0,
+      agent.bbt_staked ?? 0,
+      agent.bot_nft_mint || null,
+      agent.metadata ? JSON.stringify(agent.metadata) : null,
+      agent.created_at || Date.now(),
+      agent.updated_at || Date.now(),
+      agent.last_active_at || Date.now(),
+    );
+    return agent;
+  }
+
+  getAgent(id: string): any {
+    const row = this.db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
+    return row ? this.mapAgentRow(row) : undefined;
+  }
+
+  getAgentByWallet(wallet: string): any {
+    const row = this.db.prepare('SELECT * FROM agents WHERE wallet_address = ?').get(wallet);
+    return row ? this.mapAgentRow(row) : undefined;
+  }
+
+  updateAgent(id: string, updates: Record<string, any>): void {
+    const allowed = ['display_name', 'status', 'reputation_score', 'successful_trades', 'total_trades', 'accurate_signals', 'total_signals', 'uptime_hours', 'bbt_staked', 'bot_nft_mint', 'metadata', 'last_active_at'];
+    const fields: string[] = [];
+    const values: any[] = [];
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowed.includes(key)) {
+        fields.push(`${key} = ?`);
+        values.push(key === 'metadata' && value && typeof value === 'object' ? JSON.stringify(value) : value);
+      }
+    }
+    if (fields.length === 0) return;
+    fields.push('updated_at = ?');
+    values.push(Date.now());
+    values.push(id);
+    this.db.prepare(`UPDATE agents SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  }
+
+  listAgents(status?: string): any[] {
+    if (status) {
+      return this.db.prepare('SELECT * FROM agents WHERE status = ? ORDER BY reputation_score DESC').all(status).map((r: any) => this.mapAgentRow(r));
+    }
+    return this.db.prepare('SELECT * FROM agents ORDER BY reputation_score DESC').all().map((r: any) => this.mapAgentRow(r));
+  }
+
+  getAgentStatistics(): any {
+    const total = this.db.prepare("SELECT COUNT(*) as c FROM agents").get() as any;
+    const active = this.db.prepare("SELECT COUNT(*) as c FROM agents WHERE status = 'active'").get() as any;
+    const suspended = this.db.prepare("SELECT COUNT(*) as c FROM agents WHERE status = 'suspended'").get() as any;
+    const banned = this.db.prepare("SELECT COUNT(*) as c FROM agents WHERE status = 'banned'").get() as any;
+    const pending = this.db.prepare("SELECT COUNT(*) as c FROM agents WHERE status = 'pending_verification'").get() as any;
+    const withNft = this.db.prepare("SELECT COUNT(*) as c FROM agents WHERE bot_nft_mint IS NOT NULL").get() as any;
+    const avgRep = this.db.prepare("SELECT COALESCE(AVG(reputation_score), 0) as c FROM agents").get() as any;
+    const totalStaked = this.db.prepare("SELECT COALESCE(SUM(bbt_staked), 0) as c FROM agents").get() as any;
+    return {
+      total: total?.c || 0,
+      active: active?.c || 0,
+      suspended: suspended?.c || 0,
+      banned: banned?.c || 0,
+      pending: pending?.c || 0,
+      with_nft: withNft?.c || 0,
+      avg_reputation: Math.round(avgRep?.c || 0),
+      total_staked: totalStaked?.c || 0,
+    };
+  }
+
+  private mapAgentRow(row: any): any {
+    let metadataUri: string | undefined;
+    try {
+      const meta = row.metadata ? JSON.parse(row.metadata) : undefined;
+      metadataUri = meta?.metadata_uri;
+    } catch {}
+    return {
+      agent_id: row.id,
+      wallet_address: row.wallet_address,
+      display_name: row.display_name,
+      metadata_uri: metadataUri,
+      status: row.status,
+      reputation_score: row.reputation_score,
+      total_trades: row.total_trades,
+      successful_trades: row.successful_trades,
+      total_signals: row.total_signals,
+      accurate_signals: row.accurate_signals,
+      uptime_hours: row.uptime_hours,
+      bot_nft_mint: row.bot_nft_mint,
+      bbt_staked: row.bbt_staked,
+      created_at: row.created_at,
+      updated_at: row.updated_at || row.last_active_at || row.created_at,
+      last_active_at: row.last_active_at,
+    };
+  }
+
+  // ═══════════════════════════════════════════
+  // Strategy-Agent Binding
+  // ═══════════════════════════════════════════
+
+  createStrategyAgentBinding(binding: any): any {
+    const stmt = this.db.prepare(`
+      INSERT INTO strategy_agents (id, strategy_id, agent_id, agent_wallet, agent_type, execution_mode, fee_share_bps, status, metadata, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      binding.id,
+      binding.strategy_id,
+      binding.agent_id,
+      binding.agent_wallet,
+      binding.agent_type || 'ai_llm',
+      binding.execution_mode || 'auto',
+      binding.fee_share_bps ?? 100,
+      binding.status || 'active',
+      binding.metadata ? JSON.stringify(binding.metadata) : null,
+      binding.created_at || Date.now(),
+      binding.updated_at || Date.now(),
+    );
+    return binding;
+  }
+
+  getStrategyAgents(strategyId: string): any[] {
+    return this.db.prepare("SELECT * FROM strategy_agents WHERE strategy_id = ? AND status = 'active' ORDER BY created_at DESC").all(strategyId).map((r: any) => this.mapBindingRow(r));
+  }
+
+  getAgentBinding(agentId: string): any {
+    const row = this.db.prepare("SELECT * FROM strategy_agents WHERE agent_id = ?").get(agentId);
+    return row ? this.mapBindingRow(row) : undefined;
+  }
+
+  removeStrategyAgentBinding(agentId: string): void {
+    this.db.prepare("UPDATE strategy_agents SET status = 'revoked', updated_at = ? WHERE agent_id = ?").run(Date.now(), agentId);
+  }
+
+  updateStrategyAgentBindingStatus(agentId: string, status: string): void {
+    this.db.prepare("UPDATE strategy_agents SET status = ?, updated_at = ? WHERE agent_id = ?").run(status, Date.now(), agentId);
+  }
+
+  private mapBindingRow(row: any): any {
+    let metadata: Record<string, unknown> = {};
+    try {
+      if (row.metadata) metadata = JSON.parse(row.metadata);
+    } catch {}
+    return {
+      id: row.id,
+      strategy_id: row.strategy_id,
+      agent_id: row.agent_id,
+      agent_wallet: row.agent_wallet,
+      agent_type: row.agent_type,
+      execution_mode: row.execution_mode,
+      fee_share_bps: row.fee_share_bps,
+      status: row.status,
+      metadata,
+      created_at: row.created_at,
+      updated_at: row.updated_at || row.created_at,
+    };
+  }
+
+  // ═══════════════════════════════════════════
+  // Bundle Products & Purchases
+  // ═══════════════════════════════════════════
+
+  createBundleProduct(product: any): any {
+    const stmt = this.db.prepare(`
+      INSERT INTO bundle_products (id, name, description, price_sol, price_bbt, blindbox_count, bonus_days, nft_tier, strategy_ids, max_supply, sold_count, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      product.id,
+      product.name,
+      product.description || null,
+      product.price_sol ?? 0,
+      product.price_bbt ?? 0,
+      product.blindbox_count ?? 0,
+      product.bonus_days ?? 0,
+      product.nft_tier || null,
+      product.strategy_ids ? JSON.stringify(product.strategy_ids) : null,
+      product.max_supply ?? 0,
+      product.sold_count ?? 0,
+      product.status || 'active',
+      product.created_at || Date.now(),
+    );
+    return product;
+  }
+
+  getBundleProducts(): any[] {
+    return this.db.prepare("SELECT * FROM bundle_products WHERE status = 'active' ORDER BY created_at DESC").all().map((r: any) => this.mapBundleRow(r));
+  }
+
+  getBundleProduct(id: string): any {
+    const row = this.db.prepare('SELECT * FROM bundle_products WHERE id = ?').get(id);
+    return row ? this.mapBundleRow(row) : undefined;
+  }
+
+  updateBundleSoldCount(id: string, soldCount: number): void {
+    this.db.prepare('UPDATE bundle_products SET sold_count = ? WHERE id = ?').run(soldCount, id);
+  }
+
+  purchaseBundle(record: any): any {
+    const stmt = this.db.prepare(`
+      INSERT INTO bundle_purchases (id, bundle_id, wallet, user_id, payment_method, tx_signature, nft_id, nft_mint, tier, subscription_days, expires_at, blindbox_credits, subscription_ids, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      record.id,
+      record.bundle_id,
+      record.wallet,
+      record.user_id,
+      record.payment_method || null,
+      record.tx_signature || null,
+      record.nft_id || null,
+      record.nft_mint || null,
+      record.tier || null,
+      record.subscription_days || null,
+      record.expires_at || null,
+      record.blindbox_credits ?? 0,
+      record.subscription_ids ? JSON.stringify(record.subscription_ids) : null,
+      record.created_at || Date.now(),
+    );
+    return record;
+  }
+
+  getBundlePurchases(wallet?: string): any[] {
+    if (wallet) {
+      return this.db.prepare('SELECT * FROM bundle_purchases WHERE wallet = ? ORDER BY created_at DESC').all(wallet);
+    }
+    return this.db.prepare('SELECT * FROM bundle_purchases ORDER BY created_at DESC').all();
+  }
+
+  getBundlePurchaseByTx(txSignature: string): any {
+    return this.db.prepare('SELECT * FROM bundle_purchases WHERE tx_signature = ?').get(txSignature);
+  }
+
+  private mapBundleRow(row: any): any {
+    let strategyIds: string[] = [];
+    try {
+      if (row.strategy_ids) strategyIds = JSON.parse(row.strategy_ids);
+    } catch {}
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      price_sol: row.price_sol,
+      price_bbt: row.price_bbt,
+      blindbox_count: row.blindbox_count,
+      bonus_days: row.bonus_days,
+      nft_tier: row.nft_tier,
+      strategy_ids: strategyIds,
+      max_supply: row.max_supply,
+      sold_count: row.sold_count,
+      status: row.status,
+      created_at: row.created_at,
+    };
   }
 
   close() {

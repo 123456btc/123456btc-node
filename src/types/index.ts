@@ -101,6 +101,7 @@ export interface ProviderConfig {
   bbt_mint: string;
   burn_rate: number;
   node_port: number;
+  p2p_port?: number;
   admin_api_key: string;
   settlement_mode?: 'memo' | 'escrow';
 }

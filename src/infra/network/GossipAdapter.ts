@@ -33,6 +33,7 @@ export interface GossipAdapterOptions {
   role: 'provider' | 'subscriber' | 'relay' | 'peer';
   seeds: string[]; // ws://host:port/peer 格式
   topic?: string;
+  p2pPort?: number; // libp2p TCP/WebSocket 监听端口，0 或留空表示随机端口
 }
 
 export interface GossipStats {
@@ -151,10 +152,15 @@ export class GossipAdapter {
         identify: identify() as any,
       },
       addresses: {
-        listen: [
-          `/ip4/0.0.0.0/tcp/0`, // TCP 随机端口，避免多节点同机冲突
-          `/ip4/0.0.0.0/tcp/0/ws`, // WebSocket 随机端口
-        ],
+        listen: options.p2pPort && options.p2pPort > 0
+          ? [
+              `/ip4/0.0.0.0/tcp/${options.p2pPort}`,
+              `/ip4/0.0.0.0/tcp/${options.p2pPort}/ws`,
+            ]
+          : [
+              `/ip4/0.0.0.0/tcp/0`, // TCP 随机端口，避免多节点同机冲突
+              `/ip4/0.0.0.0/tcp/0/ws`, // WebSocket 随机端口
+            ],
       },
       transportManager: {
         faultTolerance: 'NO_FATAL' as any,
@@ -189,12 +195,16 @@ export class GossipAdapter {
     // 定期清理 seen 去重缓存（每 60 秒清理一次）
     this.cleanupInterval = setInterval(() => { this.seen.clear(); }, 60_000);
 
+    // 获取实际监听地址
+    const listenAddrs = this.node.getMultiaddrs?.().map((a: any) => a.toString()) ?? [];
+
     this.logger.info('GossipAdapter (libp2p-gossipsub) started', {
       nodeId: options.nodeId,
       peerId: this.libp2pPeerId,
       topic: this.topic,
       seeds: bootstrapList.length,
       role: options.role,
+      listenAddresses: listenAddrs,
     });
   }
 

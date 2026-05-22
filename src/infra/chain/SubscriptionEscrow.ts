@@ -42,6 +42,9 @@ export interface SubscriptionState {
   merkleRoot: string;
 }
 
+// 默认 Program ID（devnet placeholder），实际通过构造函数或环境变量覆盖
+const DEFAULT_PROGRAM_ID = new PublicKey('SubsEsc111111111111111111111111111111111111');
+
 // Merkle 树工具（信号链下聚合 → 链上锚定）
 export class SignalMerkleTree {
   private leaves: Buffer[] = [];
@@ -101,14 +104,14 @@ export class SubscriptionEscrowClient {
       // Real mode: new SubscriptionEscrowClient(connection, wallet, programId?, logger?)
       this.connection = arg1;
       this.wallet = arg2;
-      this.programId = arg3 || new PublicKey('11111111111111111111111111111111');
+      this.programId = arg3 || DEFAULT_PROGRAM_ID;
       this.logger = arg4 || new Logger();
       this.isMock = false;
     } else {
       // Mock mode: new SubscriptionEscrowClient(logger, rpcUrl?)
       this.logger = arg1;
       this.connection = new Connection(arg2 || 'https://api.mainnet-beta.solana.com');
-      this.programId = new PublicKey('11111111111111111111111111111111');
+      this.programId = DEFAULT_PROGRAM_ID;
       this.isMock = true;
     }
   }

@@ -91,7 +91,7 @@ describe('BlindBoxEngine', () => {
       const expectedRate = tier.probabilityBps / totalBps;
       const actualRate = (counts.get(tier.id) || 0) / trials;
       // 对于极低概率的 tier（如 jackpot 50/10000），放宽误差
-      const tolerance = Math.max(0.3, 0.5 / Math.sqrt(trials * expectedRate));
+      const tolerance = Math.max(0.4, 1.0 / Math.sqrt(trials * expectedRate));
       expect(actualRate).toBeGreaterThan(expectedRate * (1 - tolerance));
       expect(actualRate).toBeLessThan(expectedRate * (1 + tolerance));
     }

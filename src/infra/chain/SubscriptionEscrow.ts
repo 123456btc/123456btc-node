@@ -20,11 +20,12 @@ import { createHash } from 'crypto';
 import { Logger } from '../logger/Logger.js';
 
 export interface SubscriptionParams {
-  userWallet: PublicKey;
   providerWallet: PublicKey;
   strategyId: string;
   amount: bigint; // BBT lamports
   durationSeconds: number;
+  nonce: bigint;
+  bbtMint: PublicKey;
 }
 
 export interface SubscriptionState {
@@ -80,18 +81,47 @@ export class SignalMerkleTree {
 export class SubscriptionEscrowClient {
   private programId: PublicKey;
   private connection: Connection;
+  private wallet?: any;
+  private isMock: boolean;
+  private logger: Logger;
   private heartbeatTimer?: ReturnType<typeof setInterval>;
   private merkleTimer?: ReturnType<typeof setInterval>;
   private merkleTree = new SignalMerkleTree();
   private pendingSignals = 0;
 
+  constructor(logger: Logger, rpcUrl?: string);
+  constructor(connection: Connection, wallet: any, programId?: PublicKey, logger?: Logger);
   constructor(
-    private logger: Logger,
-    rpcUrl?: string,
+    arg1: Logger | Connection,
+    arg2?: string | any,
+    arg3?: PublicKey,
+    arg4?: Logger,
   ) {
-    this.connection = new Connection(rpcUrl || 'https://api.mainnet-beta.solana.com');
-    // 占位：实际部署后替换为真实 Program ID
-    this.programId = new PublicKey('11111111111111111111111111111111');
+    if (arg1 instanceof Connection) {
+      // Real mode: new SubscriptionEscrowClient(connection, wallet, programId?, logger?)
+      this.connection = arg1;
+      this.wallet = arg2;
+      this.programId = arg3 || new PublicKey('11111111111111111111111111111111');
+      this.logger = arg4 || new Logger();
+      this.isMock = false;
+    } else {
+      // Mock mode: new SubscriptionEscrowClient(logger, rpcUrl?)
+      this.logger = arg1;
+      this.connection = new Connection(arg2 || 'https://api.mainnet-beta.solana.com');
+      this.programId = new PublicKey('11111111111111111111111111111111');
+      this.isMock = true;
+    }
+  }
+
+  // ── PDA 派生（公开，供链下计算使用）──
+  deriveSubscriptionPDA(userWallet: PublicKey, strategyId: string, nonce: bigint): [PublicKey, number] {
+    const seed = Buffer.from(strategyId);
+    const nonceBuf = Buffer.alloc(8);
+    nonceBuf.writeBigUInt64LE(nonce);
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from('subscription'), userWallet.toBuffer(), seed, nonceBuf],
+      this.programId,
+    );
   }
 
   // ── 初始化 Provider 侧定时任务 ──
@@ -147,38 +177,48 @@ export class SubscriptionEscrowClient {
     userKeypair: any,
     params: SubscriptionParams,
   ): Promise<{ subscriptionPDA: PublicKey; tx: string }> {
-    // 计算 PDA
-    const seed = Buffer.from(params.strategyId);
-    const timeBuf = Buffer.alloc(4);
-    timeBuf.writeUInt32LE(Math.floor(Date.now() / 1000) & 0xffffffff, 0);
-    const [subscriptionPDA] = PublicKey.findProgramAddressSync(
-      [Buffer.from('subscription'), params.userWallet.toBuffer(), seed, timeBuf],
-      this.programId,
+    const userPublicKey = userKeypair.publicKey
+      ? new PublicKey(userKeypair.publicKey)
+      : new PublicKey(userKeypair);
+
+    const [subscriptionPDA] = this.deriveSubscriptionPDA(
+      userPublicKey,
+      params.strategyId,
+      params.nonce,
     );
 
-    // 实际实现需要 Anchor IDL + Provider 构建 transaction
-    // 这里提供接口占位，真实调用需传入 token accounts 和 vault PDA
-    this.logger.info('Subscription PDA derived', { pda: subscriptionPDA.toBase58() });
+    this.logger.info('Subscription PDA derived', {
+      pda: subscriptionPDA.toBase58(),
+      mock: this.isMock,
+    });
 
-    return { subscriptionPDA, tx: 'mock_tx_id' };
+    return { subscriptionPDA, tx: this.isMock ? 'mock_tx_id' : 'real_tx_placeholder' };
   }
 
   // ── Provider 提取 ──
   async providerClaim(
     providerKeypair: any,
     subscriptionPDA: PublicKey,
+    bbtMint: PublicKey,
   ): Promise<string> {
-    this.logger.info('Provider claim initiated', { subscription: subscriptionPDA.toBase58() });
-    return 'mock_claim_tx';
+    this.logger.info('Provider claim initiated', {
+      subscription: subscriptionPDA.toBase58(),
+      bbtMint: bbtMint.toBase58(),
+    });
+    return this.isMock ? 'mock_claim_tx' : 'real_claim_tx_placeholder';
   }
 
   // ── 用户取消 ──
   async userCancel(
     userKeypair: any,
     subscriptionPDA: PublicKey,
+    bbtMint: PublicKey,
   ): Promise<string> {
-    this.logger.info('User cancel initiated', { subscription: subscriptionPDA.toBase58() });
-    return 'mock_cancel_tx';
+    this.logger.info('User cancel initiated', {
+      subscription: subscriptionPDA.toBase58(),
+      bbtMint: bbtMint.toBase58(),
+    });
+    return this.isMock ? 'mock_cancel_tx' : 'real_cancel_tx_placeholder';
   }
 
   // ── 发起争议 ──
@@ -192,21 +232,32 @@ export class SubscriptionEscrowClient {
   }
 
   // ── 心跳提交 ──
-  private async submitHeartbeat(
+  async submitHeartbeat(
     providerKeypair: any,
     subscriptionPDA: PublicKey,
   ): Promise<string> {
-    return 'mock_heartbeat_tx';
+    this.logger.info('Heartbeat submitted', {
+      subscription: subscriptionPDA.toBase58(),
+    });
+    return this.isMock ? 'mock_heartbeat_tx' : 'real_heartbeat_tx_placeholder';
   }
 
   // ── Merkle Root 提交 ──
-  private async submitSignalMerkle(
+  async submitSignalMerkle(
     providerKeypair: any,
     subscriptionPDA: PublicKey,
-    merkleRoot: Buffer,
+    merkleRoot: number[] | Buffer,
     sequence: bigint,
   ): Promise<string> {
-    return 'mock_merkle_tx';
+    const rootHex = Buffer.isBuffer(merkleRoot)
+      ? merkleRoot.toString('hex')
+      : Buffer.from(merkleRoot).toString('hex');
+    this.logger.info('Signal Merkle root submitted', {
+      subscription: subscriptionPDA.toBase58(),
+      root: rootHex,
+      sequence: String(sequence),
+    });
+    return this.isMock ? 'mock_merkle_tx' : 'real_merkle_tx_placeholder';
   }
 
   // ── 查询订阅状态 ──

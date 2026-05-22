@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { randomBytes } from 'crypto';
+import { Keypair, PublicKey } from '@solana/web3.js';
 import { createHttpServer } from './api/http.js';
 import { createWebSocketServer } from './api/ws.js';
 import { SubscriptionStore } from './core/SubscriptionStore.js';
@@ -76,6 +77,9 @@ program
   .option('--p2p-port <port>', 'libp2p P2P port (0 = random)', '0')
   .option('--seeds <urls>', 'Comma-separated seed peer URLs')
   .option('--settlement-mode <mode>', 'Settlement mode: memo | escrow', 'memo')
+  .option('--escrow-program-id <id>', 'SubscriptionEscrow Program ID (for escrow mode)')
+  .option('--provider-keypair <path>', 'Path to provider keypair JSON file (for escrow mode)')
+  .option('--platform-wallet <address>', 'Platform treasury wallet (for escrow fee distribution)')
   .action((opts) => {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -95,6 +99,9 @@ program
       role: 'peer' as NodeRole,
       seeds: opts.seeds ? String(opts.seeds).split(',') : [],
       settlement_mode: opts.settlementMode as 'memo' | 'escrow',
+      escrow_program_id: opts.escrowProgramId || '',
+      provider_keypair_path: opts.providerKeypair || '',
+      platform_wallet: opts.platformWallet || '',
     };
 
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
@@ -108,6 +115,11 @@ program
     console.log(`  P2P Port:       ${config.p2p_port}`);
     console.log(`  Seeds:          ${config.seeds.join(', ') || 'none'}`);
     console.log(`  Settlement:     ${config.settlement_mode}`);
+    if (config.settlement_mode === 'escrow') {
+      console.log(`  Escrow Program: ${config.escrow_program_id || 'not set'}`);
+      console.log(`  Provider KP:    ${config.provider_keypair_path || 'not set'}`);
+      console.log(`  Platform Wallet: ${config.platform_wallet || 'not set'}`);
+    }
     console.log(`  Config:         ${CONFIG_PATH}`);
     console.log('');
     console.log('⚠️  Save your admin API key securely:');
@@ -223,6 +235,13 @@ program
     const settlement = new SettlementEngine(config as ProviderConfig, store);
     await settlement.init();
     settlement.mode = (config.settlement_mode || 'memo') as 'memo' | 'escrow';
+
+    if (config.settlement_mode === 'escrow' && config.provider_keypair_path) {
+      const keypairData = JSON.parse(fs.readFileSync(config.provider_keypair_path, 'utf-8'));
+      const providerKeypair = Keypair.fromSecretKey(Uint8Array.from(keypairData));
+      const programId = config.escrow_program_id ? new PublicKey(config.escrow_program_id) : undefined;
+      settlement.enableEscrowMode(providerKeypair, programId);
+    }
 
     const logger = new Logger();
 
@@ -1247,6 +1266,40 @@ inscribeCmd
 
     console.log('  └─────────┴────────────┴───────┴──────────┴───────────┘');
     console.log('');
+  });
+
+// ── escrow ──
+const escrowCmd = program.command('escrow').description('Escrow mode operations');
+
+escrowCmd
+  .command('status')
+  .description('Query escrow subscription status')
+  .requiredOption('--pda <pda>', 'Subscription PDA')
+  .action(async (opts) => {
+    const config = loadConfig();
+    const store = await SubscriptionStore.create(path.join(DATA_DIR, 'node.db'));
+    const settlement = new SettlementEngine(config as ProviderConfig, store);
+    await settlement.init();
+    const state = await settlement.getEscrowState(new PublicKey(opts.pda));
+    console.log(state);
+    store.close();
+  });
+
+escrowCmd
+  .command('claim')
+  .description('Provider claim earned BBT from escrow')
+  .requiredOption('--pda <pda>', 'Subscription PDA')
+  .requiredOption('--keypair <path>', 'Provider keypair path')
+  .action(async (opts) => {
+    const keypairData = JSON.parse(fs.readFileSync(opts.keypair, 'utf-8'));
+    const providerKeypair = Keypair.fromSecretKey(Uint8Array.from(keypairData));
+    const config = loadConfig();
+    const store = await SubscriptionStore.create(path.join(DATA_DIR, 'node.db'));
+    const settlement = new SettlementEngine(config as ProviderConfig, store);
+    await settlement.init();
+    const tx = await settlement.providerClaim(new PublicKey(opts.pda), providerKeypair);
+    console.log('Claim tx:', tx);
+    store.close();
   });
 
 // ── Helpers ──

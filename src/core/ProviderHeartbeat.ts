@@ -23,6 +23,7 @@ export interface HeartbeatConfig {
   programId: PublicKey;
   vaultATA: PublicKey;
   cluster: string;
+  subscriptionPDA?: PublicKey;
   heartbeatIntervalMs?: number;
   merkleIntervalMs?: number;
   claimIntervalMs?: number;
@@ -39,9 +40,10 @@ export class ProviderHeartbeat {
     private config: HeartbeatConfig,
     private store: SubscriptionStore,
     private logger: Logger,
+    escrowClient?: SubscriptionEscrowClient,
   ) {
     this.connection = new Connection(config.cluster, 'confirmed');
-    this.escrow = new SubscriptionEscrowClient(logger, config.cluster);
+    this.escrow = escrowClient || new SubscriptionEscrowClient(logger, config.cluster);
   }
 
   // ── 启动所有定时任务 ──
@@ -94,12 +96,21 @@ export class ProviderHeartbeat {
   // ── 内部：提交心跳 ──
   private async runHeartbeat() {
     try {
-      // TODO: 实际实现需要 Anchor IDL + 构建 heartbeat transaction
-      // 当前为占位实现，不执行链上操作
-      this.logger.info('Heartbeat tick (PLACEHOLDER - not yet on-chain)', {
-        provider: this.config.providerKeypair.publicKey.toBase58(),
-        pendingSignals: this.pendingSignals,
-      });
+      const { providerKeypair, subscriptionPDA } = this.config;
+      if (subscriptionPDA) {
+        const tx = await this.escrow.submitHeartbeat(providerKeypair, subscriptionPDA);
+        this.logger.info('Heartbeat submitted on-chain', {
+          tx,
+          subscription: subscriptionPDA.toBase58(),
+          provider: providerKeypair.publicKey.toBase58(),
+          pendingSignals: this.pendingSignals,
+        });
+      } else {
+        this.logger.info('Heartbeat tick (no subscriptionPDA configured)', {
+          provider: providerKeypair.publicKey.toBase58(),
+          pendingSignals: this.pendingSignals,
+        });
+      }
     } catch (err) {
       this.logger.warn('Heartbeat failed', { err });
     }
@@ -111,13 +122,30 @@ export class ProviderHeartbeat {
     if (!stats || (stats as any).pending === 0) return;
 
     try {
-      // TODO: 实际实现需要构建 Merkle Root 并提交链上交易
-      // 当前为占位实现，不执行链上操作
-      this.logger.info('Merkle submit tick (PLACEHOLDER - not yet on-chain)', {
-        signals: this.pendingSignals,
-        provider: this.config.providerKeypair.publicKey.toBase58(),
-      });
-      this.pendingSignals = 0;
+      const { providerKeypair, subscriptionPDA } = this.config;
+      if (subscriptionPDA && this.merkleTree.count > 0) {
+        const root = this.merkleTree.getRoot();
+        const sequence = BigInt(this.pendingSignals);
+        const tx = await this.escrow.submitSignalMerkle(
+          providerKeypair,
+          subscriptionPDA,
+          Array.from(root),
+          sequence,
+        );
+        this.logger.info('Merkle root submitted on-chain', {
+          tx,
+          root: root.toString('hex'),
+          signals: this.merkleTree.count,
+          provider: providerKeypair.publicKey.toBase58(),
+        });
+        this.merkleTree.clear();
+        this.pendingSignals = 0;
+      } else {
+        this.logger.info('Merkle submit tick (no subscriptionPDA configured or empty tree)', {
+          signals: this.pendingSignals,
+          provider: providerKeypair.publicKey.toBase58(),
+        });
+      }
     } catch (err) {
       this.logger.warn('Merkle submit failed', { err });
     }
@@ -126,11 +154,17 @@ export class ProviderHeartbeat {
   // ── 内部：自动 claim ──
   private async runAutoClaim() {
     try {
-      // TODO: 实际实现需要遍历 subscription PDAs 并调用 claim 指令
-      // 当前为占位实现，不执行链上操作
-      this.logger.info('Auto claim tick (PLACEHOLDER - not yet on-chain)', {
-        provider: this.config.providerKeypair.publicKey.toBase58(),
-      });
+      const { providerKeypair, subscriptionPDA } = this.config;
+      if (subscriptionPDA) {
+        this.logger.info('Auto claim tick (subscriptionPDA configured but auto-claim not yet implemented)', {
+          provider: providerKeypair.publicKey.toBase58(),
+          subscription: subscriptionPDA.toBase58(),
+        });
+      } else {
+        this.logger.info('Auto claim tick (PLACEHOLDER - no subscriptionPDA)', {
+          provider: providerKeypair.publicKey.toBase58(),
+        });
+      }
     } catch (err) {
       this.logger.warn('Auto claim failed', { err });
     }

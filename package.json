@@ -53,6 +53,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@solana/spl-memo": "^0.2.0",
     "@solana/spl-token": "^0.4.0",
+    "@coral-xyz/anchor": "^0.29.0",
     "@solana/web3.js": "^1.91.0",
     "better-sqlite3": "^9.4.0",
     "bullmq": "^5.76.10",

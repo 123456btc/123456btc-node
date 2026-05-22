@@ -3,13 +3,13 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-subscription_escrow = "SubsEsc1111111111111111111111111111111111112"
+subscription_escrow = "SubsEsc111111111111111111111111111111111111"
 
 [programs.devnet]
-subscription_escrow = "SubsEsc1111111111111111111111111111111111112"
+subscription_escrow = "SubsEsc111111111111111111111111111111111111"
 
 [programs.mainnet]
-subscription_escrow = "SubsEsc1111111111111111111111111111111111112"
+subscription_escrow = "SubsEsc111111111111111111111111111111111111"
 
 [registry]
 url = "https://api.apr.dev"

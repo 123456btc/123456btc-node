@@ -4,6 +4,7 @@ members = [
     "programs/blindbox_escrow",
     "programs/agent_registry",
     "programs/bridge",
+    "programs/subscription_escrow",
 ]
 
 

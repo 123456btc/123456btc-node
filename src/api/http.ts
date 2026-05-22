@@ -6,6 +6,7 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import { Keypair, PublicKey } from '@solana/web3.js';
 import type { SubscriptionStore } from '../core/SubscriptionStore.js';
 import type { AuthManager } from '../core/AuthManager.js';
 import type { SignalHub } from '../core/SignalHub.js';
@@ -335,6 +336,35 @@ export function createHttpServer(
         const amount = strategy.pricing_model === 'daily_bbt' ? strategy.price_per_day : 0;
         const memo = `BBT-SUB|${sub.id}|${strategyId}|${wallet}`;
 
+        let payment: Record<string, unknown> | null = null;
+        let escrow: Record<string, unknown> | null = null;
+
+        if (strategy.pricing_model !== 'free') {
+          if (config.settlement_mode === 'escrow') {
+            const durationDays = body.duration_days ? parseInt(body.duration_days as string, 10) : 1;
+            const escrowData = await settlement.buildEscrowSubscription(
+              new PublicKey(wallet),
+              strategyId,
+              amount || 0,
+              durationDays,
+            );
+            escrow = {
+              subscription_pda: escrowData.subscriptionPDA.toBase58(),
+              amount_bbt: escrowData.amount,
+              memo: escrowData.memo,
+              instruction: '请在链上调用 SubscriptionEscrow 合约创建订阅，并转账对应 BBT 到 PDA',
+            };
+          } else {
+            payment = {
+              creator_wallet: strategy.creator_wallet,
+              bbt_mint: config.bbt_mint,
+              amount_bbt: amount,
+              memo,
+              instruction: `请向 ${strategy.creator_wallet} 转账 ${amount} BBT，Memo 填写: ${memo}`,
+            };
+          }
+        }
+
         res.statusCode = 201;
         res.end(JSON.stringify({
           subscription_id: sub.id,
@@ -346,13 +376,8 @@ export function createHttpServer(
             price_per_day: strategy.price_per_day,
             price_per_signal: strategy.price_per_signal,
           },
-          payment: strategy.pricing_model === 'free' ? null : {
-            creator_wallet: strategy.creator_wallet,
-            bbt_mint: config.bbt_mint,
-            amount_bbt: amount,
-            memo,
-            instruction: `请向 ${strategy.creator_wallet} 转账 ${amount} BBT，Memo 填写: ${memo}`,
-          },
+          payment,
+          escrow,
         }));
         return;
       }
@@ -999,7 +1024,63 @@ export function createHttpServer(
       }
 
       // ═══════════════════════════════════════════
-      // 20. 健康检查
+      // 20. Escrow 链上状态查询
+      // ═══════════════════════════════════════════
+      if (req.method === 'GET' && url.pathname.startsWith('/escrow/subscription/')) {
+        const pda = url.pathname.split('/')[3];
+        if (!pda) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'PDA required' }));
+          return;
+        }
+        const state = await settlement.getEscrowState(new PublicKey(pda));
+        if (!state) {
+          res.statusCode = 404;
+          res.end(JSON.stringify({ error: 'Subscription not found on-chain' }));
+          return;
+        }
+        res.statusCode = 200;
+        res.end(JSON.stringify({ pda, state }));
+        return;
+      }
+
+      // ═══════════════════════════════════════════
+      // 21. Escrow Provider 提取
+      // ═══════════════════════════════════════════
+      if (req.method === 'POST' && url.pathname === '/escrow/claim') {
+        const walletAuth = verifyWalletAuth(req, auth);
+        if (!walletAuth.valid) {
+          res.statusCode = 401;
+          res.end(JSON.stringify({ error: 'Wallet signature required', detail: walletAuth.error }));
+          return;
+        }
+        if (walletAuth.wallet !== config.wallet_address) {
+          res.statusCode = 403;
+          res.end(JSON.stringify({ error: 'Only provider wallet can claim' }));
+          return;
+        }
+        const body = await readJson(req);
+        const pda = body.pda as string;
+        if (!pda) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'pda required' }));
+          return;
+        }
+        if (!config.provider_keypair_path) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ error: 'Provider keypair not configured' }));
+          return;
+        }
+        const keypairData = JSON.parse(fs.readFileSync(config.provider_keypair_path, 'utf-8'));
+        const providerKeypair = Keypair.fromSecretKey(Uint8Array.from(keypairData));
+        const tx = await settlement.providerClaim(new PublicKey(pda), providerKeypair);
+        res.statusCode = 200;
+        res.end(JSON.stringify({ success: true, tx }));
+        return;
+      }
+
+      // ═══════════════════════════════════════════
+      // 22. 健康检查
       // ═══════════════════════════════════════════
       if (req.method === 'GET' && url.pathname === '/health') {
         res.statusCode = 200;

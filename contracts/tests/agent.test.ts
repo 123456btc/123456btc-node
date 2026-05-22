@@ -13,7 +13,7 @@ describe("Agent Registry", () => {
     const provider = anchor.AnchorProvider.env();
     anchor.setProvider(provider);
 
-    const program = anchor.workspace.AgentRegistry as Program<AgentRegistry>;
+    const program = anchor.workspace.AgentRegistry as any;
 
     const agentOwner = Keypair.generate();
     const admin = provider.wallet;
@@ -48,7 +48,7 @@ describe("Agent Registry", () => {
             .signers([agentOwner])
             .rpc();
 
-        const agent = await program.account.agent.fetch(agentPda);
+        const agent = await (program as any).account.agent.fetch(agentPda);
         expect(agent.owner.toBase58()).to.equal(agentOwner.publicKey.toBase58());
         expect(agent.name).to.equal(name);
         expect(agent.description).to.equal(description);
@@ -75,7 +75,7 @@ describe("Agent Registry", () => {
             .signers([agentOwner])
             .rpc();
 
-        const agent = await program.account.agent.fetch(agentPda);
+        const agent = await (program as any).account.agent.fetch(agentPda);
         expect(agent.endpoint).to.equal(newEndpoint);
     });
 
@@ -95,7 +95,7 @@ describe("Agent Registry", () => {
             .signers([agentOwner])
             .rpc();
 
-        const agent = await program.account.agent.fetch(agentPda);
+        const agent = await (program as any).account.agent.fetch(agentPda);
         expect(agent.totalTasks.toNumber()).to.equal(1);
         expect(agent.successfulTasks.toNumber()).to.equal(1);
         expect(agent.reputationScore.toNumber()).to.equal(100);
@@ -117,7 +117,7 @@ describe("Agent Registry", () => {
             .signers([agentOwner])
             .rpc();
 
-        const agent = await program.account.agent.fetch(agentPda);
+        const agent = await (program as any).account.agent.fetch(agentPda);
         expect(agent.status).to.deep.equal({ paused: {} });
     });
 });

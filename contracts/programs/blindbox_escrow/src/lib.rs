@@ -9,7 +9,7 @@
  */
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 
 declare_id!("BX2fkBCPkkx8ogWUPPLw1rX1irX1SJP6hxx92Yxu1vTh");
 
@@ -113,13 +113,38 @@ pub mod blindbox_escrow {
         let fee = blindbox.amount * FEE_BPS / 10000;
         let to_creator = blindbox.amount - fee;
 
+        let seeds = &[
+            b"blindbox_vault".as_ref(),
+            blindbox.creator.as_ref(),
+            &[ctx.bumps.vault_token_account],
+        ];
+        let signer_seeds = &[&seeds[..]];
+
         // 转给创建者
-        **ctx.accounts.vault_token_account.to_account_info().try_borrow_mut_lamports()? -= to_creator;
-        **ctx.accounts.creator_token_account.to_account_info().try_borrow_mut_lamports()? += to_creator;
+        let cpi_accounts_creator = Transfer {
+            from: ctx.accounts.vault_token_account.to_account_info(),
+            to: ctx.accounts.creator_token_account.to_account_info(),
+            authority: ctx.accounts.vault_token_account.to_account_info(),
+        };
+        let cpi_ctx_creator = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts_creator,
+            signer_seeds,
+        );
+        token::transfer(cpi_ctx_creator, to_creator)?;
 
         // 转平台费
-        **ctx.accounts.vault_token_account.to_account_info().try_borrow_mut_lamports()? -= fee;
-        **ctx.accounts.platform_token_account.to_account_info().try_borrow_mut_lamports()? += fee;
+        let cpi_accounts_fee = Transfer {
+            from: ctx.accounts.vault_token_account.to_account_info(),
+            to: ctx.accounts.platform_token_account.to_account_info(),
+            authority: ctx.accounts.vault_token_account.to_account_info(),
+        };
+        let cpi_ctx_fee = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            cpi_accounts_fee,
+            signer_seeds,
+        );
+        token::transfer(cpi_ctx_fee, fee)?;
 
         emit!(BlindBoxRevealed {
             blindbox: blindbox.key(),
@@ -176,15 +201,40 @@ pub mod blindbox_escrow {
             .unwrap() as u64;
         let to_creator = blindbox.amount - refund;
 
+        let seeds = &[
+            b"blindbox_vault".as_ref(),
+            blindbox.creator.as_ref(),
+            &[ctx.bumps.vault_token_account],
+        ];
+        let signer_seeds = &[&seeds[..]];
+
         if refund > 0 {
-            **ctx.accounts.vault_token_account.to_account_info().try_borrow_mut_lamports()? -= refund;
             if let Some(buyer_account) = &ctx.accounts.buyer_token_account {
-                **buyer_account.to_account_info().try_borrow_mut_lamports()? += refund;
+                let cpi_accounts = Transfer {
+                    from: ctx.accounts.vault_token_account.to_account_info(),
+                    to: buyer_account.to_account_info(),
+                    authority: ctx.accounts.vault_token_account.to_account_info(),
+                };
+                let cpi_ctx = CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    cpi_accounts,
+                    signer_seeds,
+                );
+                token::transfer(cpi_ctx, refund)?;
             }
         }
         if to_creator > 0 {
-            **ctx.accounts.vault_token_account.to_account_info().try_borrow_mut_lamports()? -= to_creator;
-            **ctx.accounts.creator_token_account.to_account_info().try_borrow_mut_lamports()? += to_creator;
+            let cpi_accounts = Transfer {
+                from: ctx.accounts.vault_token_account.to_account_info(),
+                to: ctx.accounts.creator_token_account.to_account_info(),
+                authority: ctx.accounts.vault_token_account.to_account_info(),
+            };
+            let cpi_ctx = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                cpi_accounts,
+                signer_seeds,
+            );
+            token::transfer(cpi_ctx, to_creator)?;
         }
 
         blindbox.status = BlindBoxStatus::Settled;
@@ -220,8 +270,17 @@ pub struct CreateBlindBox<'info> {
     #[account(mut)]
     pub creator_token_account: Account<'info, TokenAccount>,
 
-    #[account(mut)]
+    #[account(
+        init_if_needed,
+        payer = creator,
+        seeds = [b"blindbox_vault", creator.key().as_ref()],
+        bump,
+        token::mint = bbt_mint,
+        token::authority = vault_token_account,
+    )]
     pub vault_token_account: Account<'info, TokenAccount>,
+
+    pub bbt_mint: Account<'info, Mint>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -244,7 +303,11 @@ pub struct RevealBlindBox<'info> {
     #[account(mut)]
     pub blindbox: Account<'info, BlindBox>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [b"blindbox_vault", blindbox.creator.as_ref()],
+        bump,
+    )]
     pub vault_token_account: Account<'info, TokenAccount>,
 
     #[account(mut)]
@@ -273,7 +336,11 @@ pub struct ResolveDispute<'info> {
     #[account(mut)]
     pub blindbox: Account<'info, BlindBox>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [b"blindbox_vault", blindbox.creator.as_ref()],
+        bump,
+    )]
     pub vault_token_account: Account<'info, TokenAccount>,
 
     #[account(mut)]

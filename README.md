@@ -113,8 +113,12 @@ curl http://localhost:1119/health
 ```bash
 npm ci && npm run build
 
-# Initialize
+# Initialize (Memo mode — default)
 123456btc-node init --name "MyNode" --wallet "YOUR_SOLANA_WALLET" --rpc "https://api.devnet.solana.com"
+
+# Or initialize with Escrow mode
+123456btc-node init --name "MyNode" --wallet "YOUR_SOLANA_WALLET" \
+  --settlement-mode escrow --escrow-program-id <PROGRAM_ID>
 
 # Create strategy
 123456btc-node strategy:create --name "BTC Alpha" --symbol "BTCUSDT" --pricing daily_bbt --price-day 100
@@ -239,12 +243,29 @@ Total supply: 1 billion, no minting.
 | `per_signal_bbt` | Per-signal deduction from pre-deposited balance |
 | `free` | Free, no billing |
 
-### Settlement Flow
+### Settlement Modes
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `memo` | User sends BBT with memo, node polls chain | Simple, off-chain bookkeeping |
+| `escrow` | Funds locked in on-chain PDA, program settles | Trustless, transparent, auditable |
+
+### Memo Settlement Flow
 
 1. User selects strategy, creates subscription
 2. Node returns: Provider wallet + amount + Memo
 3. User sends BBT with Memo: `BBT-SUB|{sub_id}|{strategy_id}|{wallet}`
 4. BillingCron polls chain every 60s, matches Memo, activates subscription
+
+### Escrow Settlement Flow
+
+1. Provider deploys `subscription_escrow` program on Solana
+2. Node configured with `--settlement-mode escrow`
+3. User creates subscription → node invokes `create_subscription` on-chain
+4. BBT locked in program-derived vault PDA
+5. Provider receives 95%, platform receives 5% on settlement
+
+Escrow deployment guide: [docs/ESCROW-DEPLOY.md](docs/ESCROW-DEPLOY.md)
 
 ---
 
@@ -345,6 +366,7 @@ Node.js 20+ / TypeScript / SQLite / Solana / libp2p GossipSub / Commander / Pino
 | [SIGNAL_STANDARD.md](docs/SIGNAL_STANDARD.md) | ISES v1 signal standard |
 | [MCP-INTEGRATION.md](docs/MCP-INTEGRATION.md) | AI Agent integration |
 | [DEPLOY.md](DEPLOY.md) | Docker, HTTPS, backup |
+| [ESCROW-DEPLOY.md](docs/ESCROW-DEPLOY.md) | Escrow on-chain deployment |
 | [SECURITY.md](SECURITY.md) | Security audit checklist |
 
 ---

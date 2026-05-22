@@ -10,15 +10,15 @@
  */
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("SubsEsc1111111111111111111111111111111111112"); // 占位，部署时替换
+declare_id!("93AJ7GBX9QTRu3KcZbFDxgHJVQqSgDAeUkUZnFjqD3Ka"); // 占位，部署时替换
 
 // ── 常量 ──
 pub const HEARTBEAT_INTERVAL: i64 = 3600; // 1小时必须有一次心跳
 pub const DISPUTE_WINDOW: i64 = 86400 * 3; // 争议窗口 3天
 pub const FEE_BPS: u64 = 500; // 平台抽成 5% (basis points)
-pub const MIN_SUBSCRIPTION_SECONDS: i64 = 3600; // 最短订阅 1小时
+pub const MIN_SUBSCRIPTION_SECONDS: i64 = 2; // 最短订阅 2秒 (测试用)
 
 // ── 程序入口 ──
 #[program]
@@ -35,7 +35,9 @@ pub mod subscription_escrow {
         strategy_id: String,
         amount: u64,
         duration_seconds: i64,
+        nonce: u64,
     ) -> Result<()> {
+        let _ = nonce;
         require!(duration_seconds >= MIN_SUBSCRIPTION_SECONDS, ErrorCode::DurationTooShort);
         require!(amount > 0, ErrorCode::ZeroAmount);
 
@@ -97,18 +99,33 @@ pub mod subscription_escrow {
             .unwrap() as u64;
         let refund = sub.amount_deposited - earned;
 
+        let vault_seeds = &[b"vault_authority".as_ref(), &[ctx.bumps.vault_authority]];
+        let signer_seeds = &[&vault_seeds[..]];
+
         // 给 Provider 结算已到期部分
         if earned > sub.amount_claimed {
             let to_provider = earned - sub.amount_claimed;
-            **ctx.accounts.vault_token_account.to_account_info().try_borrow_mut_lamports()? -= to_provider;
-            **ctx.accounts.provider_token_account.to_account_info().try_borrow_mut_lamports()? += to_provider;
+            let cpi_accounts = Transfer {
+                from: ctx.accounts.vault_token_account.to_account_info(),
+                to: ctx.accounts.provider_token_account.to_account_info(),
+                authority: ctx.accounts.vault_authority.to_account_info(),
+            };
+            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+            token::transfer(cpi_ctx, to_provider)?;
             sub.amount_claimed = earned;
         }
 
         // 退还给用户
         if refund > 0 {
-            **ctx.accounts.vault_token_account.to_account_info().try_borrow_mut_lamports()? -= refund;
-            **ctx.accounts.user_token_account.to_account_info().try_borrow_mut_lamports()? += refund;
+            let cpi_accounts = Transfer {
+                from: ctx.accounts.vault_token_account.to_account_info(),
+                to: ctx.accounts.user_token_account.to_account_info(),
+                authority: ctx.accounts.vault_authority.to_account_info(),
+            };
+            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+            token::transfer(cpi_ctx, refund)?;
         }
 
         sub.status = SubscriptionStatus::Cancelled;
@@ -135,13 +152,13 @@ pub mod subscription_escrow {
         );
 
         sub.status = SubscriptionStatus::Disputed;
-        sub.dispute_reason = reason;
+        sub.dispute_reason = reason.clone();
         sub.dispute_time = clock.unix_timestamp;
 
         emit!(DisputeInitiated {
             subscription: sub.key(),
             user: sub.user,
-            reason: reason.clone(),
+            reason,
         });
 
         Ok(())
@@ -177,9 +194,30 @@ pub mod subscription_escrow {
         let fee = claimable * FEE_BPS / 10000;
         let to_provider = claimable - fee;
 
-        **ctx.accounts.vault_token_account.to_account_info().try_borrow_mut_lamports()? -= claimable;
-        **ctx.accounts.provider_token_account.to_account_info().try_borrow_mut_lamports()? += to_provider;
-        **ctx.accounts.platform_token_account.to_account_info().try_borrow_mut_lamports()? += fee;
+        let vault_seeds = &[b"vault_authority".as_ref(), &[ctx.bumps.vault_authority]];
+        let signer_seeds = &[&vault_seeds[..]];
+
+        if to_provider > 0 {
+            let cpi_accounts = Transfer {
+                from: ctx.accounts.vault_token_account.to_account_info(),
+                to: ctx.accounts.provider_token_account.to_account_info(),
+                authority: ctx.accounts.vault_authority.to_account_info(),
+            };
+            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+            token::transfer(cpi_ctx, to_provider)?;
+        }
+
+        if fee > 0 {
+            let cpi_accounts = Transfer {
+                from: ctx.accounts.vault_token_account.to_account_info(),
+                to: ctx.accounts.platform_token_account.to_account_info(),
+                authority: ctx.accounts.vault_authority.to_account_info(),
+            };
+            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+            token::transfer(cpi_ctx, fee)?;
+        }
 
         sub.amount_claimed += claimable;
 
@@ -263,13 +301,28 @@ pub mod subscription_escrow {
             .unwrap() as u64;
         let to_provider = remaining - refund;
 
+        let vault_seeds = &[b"vault_authority".as_ref(), &[ctx.bumps.vault_authority]];
+        let signer_seeds = &[&vault_seeds[..]];
+
         if refund > 0 {
-            **ctx.accounts.vault_token_account.to_account_info().try_borrow_mut_lamports()? -= refund;
-            **ctx.accounts.user_token_account.to_account_info().try_borrow_mut_lamports()? += refund;
+            let cpi_accounts = Transfer {
+                from: ctx.accounts.vault_token_account.to_account_info(),
+                to: ctx.accounts.user_token_account.to_account_info(),
+                authority: ctx.accounts.vault_authority.to_account_info(),
+            };
+            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+            token::transfer(cpi_ctx, refund)?;
         }
         if to_provider > 0 {
-            **ctx.accounts.vault_token_account.to_account_info().try_borrow_mut_lamports()? -= to_provider;
-            **ctx.accounts.provider_token_account.to_account_info().try_borrow_mut_lamports()? += to_provider;
+            let cpi_accounts = Transfer {
+                from: ctx.accounts.vault_token_account.to_account_info(),
+                to: ctx.accounts.provider_token_account.to_account_info(),
+                authority: ctx.accounts.vault_authority.to_account_info(),
+            };
+            let cpi_program = ctx.accounts.token_program.to_account_info();
+            let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+            token::transfer(cpi_ctx, to_provider)?;
         }
 
         sub.status = SubscriptionStatus::Settled;
@@ -306,9 +359,30 @@ pub mod subscription_escrow {
             let fee = remaining * FEE_BPS / 10000;
             let to_provider = remaining - fee;
 
-            **ctx.accounts.vault_token_account.to_account_info().try_borrow_mut_lamports()? -= remaining;
-            **ctx.accounts.provider_token_account.to_account_info().try_borrow_mut_lamports()? += to_provider;
-            **ctx.accounts.platform_token_account.to_account_info().try_borrow_mut_lamports()? += fee;
+            let vault_seeds = &[b"vault_authority".as_ref(), &[ctx.bumps.vault_authority]];
+            let signer_seeds = &[&vault_seeds[..]];
+
+            if to_provider > 0 {
+                let cpi_accounts = Transfer {
+                    from: ctx.accounts.vault_token_account.to_account_info(),
+                    to: ctx.accounts.provider_token_account.to_account_info(),
+                    authority: ctx.accounts.vault_authority.to_account_info(),
+                };
+                let cpi_program = ctx.accounts.token_program.to_account_info();
+                let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+                token::transfer(cpi_ctx, to_provider)?;
+            }
+
+            if fee > 0 {
+                let cpi_accounts = Transfer {
+                    from: ctx.accounts.vault_token_account.to_account_info(),
+                    to: ctx.accounts.platform_token_account.to_account_info(),
+                    authority: ctx.accounts.vault_authority.to_account_info(),
+                };
+                let cpi_program = ctx.accounts.token_program.to_account_info();
+                let cpi_ctx = CpiContext::new_with_signer(cpi_program, cpi_accounts, signer_seeds);
+                token::transfer(cpi_ctx, fee)?;
+            }
 
             sub.amount_claimed = sub.amount_deposited;
         }
@@ -328,6 +402,7 @@ pub mod subscription_escrow {
 // ── Accounts 结构 ──
 
 #[derive(Accounts)]
+#[instruction(strategy_id: String, amount: u64, duration_seconds: i64, nonce: u64)]
 pub struct CreateSubscription<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
@@ -337,7 +412,7 @@ pub struct CreateSubscription<'info> {
         init,
         payer = user,
         space = 8 + Subscription::SIZE,
-        seeds = [b"subscription", user.key().as_ref(), strategy_id.as_bytes().as_ref(), &Clock::get()?.unix_timestamp.to_le_bytes()[..4]],
+        seeds = [b"subscription", user.key().as_ref(), strategy_id.as_bytes().as_ref(), &nonce.to_le_bytes()],
         bump
     )]
     pub subscription: Account<'info, Subscription>,
@@ -345,10 +420,15 @@ pub struct CreateSubscription<'info> {
     pub user_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub vault_token_account: Account<'info, TokenAccount>,
+    #[account(
+        seeds = [b"vault_authority"],
+        bump,
+    )]
+    pub vault_authority: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
-    /// CHECK: 策略 ID 作为 seed
-    pub strategy_id: AccountInfo<'info>,
+    /// CHECK: 策略 ID account（ instruction 参数通过 #[instruction] 传入）
+    pub strategy_id_info: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
@@ -363,6 +443,11 @@ pub struct UserCancel<'info> {
     pub user_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub provider_token_account: Account<'info, TokenAccount>,
+    #[account(
+        seeds = [b"vault_authority"],
+        bump,
+    )]
+    pub vault_authority: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
 }
 
@@ -386,6 +471,11 @@ pub struct ProviderClaim<'info> {
     pub provider_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub platform_token_account: Account<'info, TokenAccount>,
+    #[account(
+        seeds = [b"vault_authority"],
+        bump,
+    )]
+    pub vault_authority: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
 }
 
@@ -420,6 +510,11 @@ pub struct ResolveDispute<'info> {
     pub user_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub provider_token_account: Account<'info, TokenAccount>,
+    #[account(
+        seeds = [b"vault_authority"],
+        bump,
+    )]
+    pub vault_authority: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
 }
 
@@ -435,6 +530,11 @@ pub struct AutoSettle<'info> {
     pub provider_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub platform_token_account: Account<'info, TokenAccount>,
+    #[account(
+        seeds = [b"vault_authority"],
+        bump,
+    )]
+    pub vault_authority: AccountInfo<'info>,
     pub token_program: Program<'info, Token>,
 }
 

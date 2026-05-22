@@ -124,7 +124,7 @@ export class SettlementEngine {
     }
   }
 
-  // ── 监听收款（日订阅确认） ──
+  // ── 监听收款（日订阅确认）──
 
   async pollIncomingPayments(sinceSignature?: string): Promise<{ signature: string; amount: number; memo?: string; fromWallet: string }[]> {
     const signatures = await this.connection.getSignaturesForAddress(
@@ -225,7 +225,7 @@ export class SettlementEngine {
     return results;
   }
 
-  // ── 构建转账指令（用户 → Provider） ──
+  // ── 构建转账指令（用户 → Provider）──
 
   async buildTransferTx(
     fromWallet: PublicKey,
@@ -265,7 +265,7 @@ export class SettlementEngine {
     return { transaction: tx, recentBlockhash: blockhash };
   }
 
-  // ── 链上 burn（可选） ──
+  // ── 链上 burn（可选）──
 
   async getBurnTx(amountBbt: number, authority: PublicKey): Promise<Transaction> {
     // 简化：burn 由 Provider 在收款后自行操作
@@ -287,6 +287,13 @@ export class SettlementEngine {
    */
   enableEscrowMode(providerKeypair: Keypair, programId?: PublicKey) {
     this.mode = 'escrow';
+    // 切换到真实客户端
+    this.escrowClient = new SubscriptionEscrowClient(
+      this.connection,
+      providerKeypair as any, // Anchor Wallet adapter
+      programId,
+      this.logger,
+    );
     this.heartbeat = new ProviderHeartbeat(
       {
         providerKeypair,
@@ -296,6 +303,7 @@ export class SettlementEngine {
       },
       this.store,
       this.logger,
+      this.escrowClient,
     );
     this.heartbeat.start();
     this.logger.info('SettlementEngine switched to escrow mode');
@@ -303,7 +311,7 @@ export class SettlementEngine {
 
   /**
    * 构建创建订阅的合约调用参数
-   * 用户端使用：生成交易让用户签名
+   * 用户端使用：生成交易让用户签名（SettlementEngine 不持有用户私钥，不做链上提交）
    */
   async buildEscrowSubscription(
     userWallet: PublicKey,
@@ -311,19 +319,8 @@ export class SettlementEngine {
     amountBbt: number,
     durationDays: number,
   ): Promise<{ subscriptionPDA: PublicKey; amount: number; memo: string }> {
-    const durationSeconds = durationDays * 86400;
-    const amount = Math.round(amountBbt * 1e6); // lamports
-
-    const { subscriptionPDA } = await this.escrowClient.createSubscription(
-      { publicKey: userWallet } as any, // mock keypair interface
-      {
-        userWallet,
-        providerWallet: this.providerWallet,
-        strategyId,
-        amount: BigInt(amount),
-        durationSeconds,
-      }
-    );
+    const nonce = BigInt(Date.now());
+    const [subscriptionPDA] = this.escrowClient.deriveSubscriptionPDA(userWallet, strategyId, nonce);
 
     return {
       subscriptionPDA,
@@ -336,14 +333,14 @@ export class SettlementEngine {
    * Provider 提取已到期费用
    */
   async providerClaim(subscriptionPDA: PublicKey, providerKeypair: Keypair): Promise<string> {
-    return this.escrowClient.providerClaim(providerKeypair, subscriptionPDA);
+    return this.escrowClient.providerClaim(providerKeypair, subscriptionPDA, this.bbtMint);
   }
 
   /**
    * 用户取消订阅（按比例退款）
    */
   async userCancel(subscriptionPDA: PublicKey, userKeypair: Keypair): Promise<string> {
-    return this.escrowClient.userCancel(userKeypair, subscriptionPDA);
+    return this.escrowClient.userCancel(userKeypair, subscriptionPDA, this.bbtMint);
   }
 
   /**
@@ -369,5 +366,6 @@ export class SettlementEngine {
 
   stop() {
     this.heartbeat?.stop();
+    this.escrowClient.stopProviderTasks?.();
   }
 }

@@ -3,20 +3,22 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-blindbox_escrow = "AavU4EhjPx9y5kB1dxuHMeyUd9Va1doMwmkSd5ADkjpv"
-agent_registry = "5NAH6tSHiYMrcLTH73ttGb6wK4PRWkGd4nRyH6ijvNwB"
-bridge = "Brdg1111111111111111111111111111111111111111"
+blindbox_escrow = "BX2fkBCPkkx8ogWUPPLw1rX1irX1SJP6hxx92Yxu1vTh"
+agent_registry = "zw4fVpJ77LoFh2T4CEzeRwUkPcnA4WyeHoRznVmHkSS"
+bridge = "Arp1X7KCmANQQJbQM9MD5zTRmsHSBgjDQyvMZP4V2hEJ"
+subscription_escrow = "93AJ7GBX9QTRu3KcZbFDxgHJVQqSgDAeUkUZnFjqD3Ka"
 
 [programs.devnet]
 blindbox_escrow = "BX2fkBCPkkx8ogWUPPLw1rX1irX1SJP6hxx92Yxu1vTh"
 agent_registry = "zw4fVpJ77LoFh2T4CEzeRwUkPcnA4WyeHoRznVmHkSS"
-bridge = "Brdg1111111111111111111111111111111111111111"
+bridge = "Arp1X7KCmANQQJbQM9MD5zTRmsHSBgjDQyvMZP4V2hEJ"
+subscription_escrow = "93AJ7GBX9QTRu3KcZbFDxgHJVQqSgDAeUkUZnFjqD3Ka"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

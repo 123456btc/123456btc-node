@@ -12,7 +12,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 
-declare_id!("Brdg1111111111111111111111111111111111111111");
+declare_id!("Arp1X7KCmANQQJbQM9MD5zTRmsHSBgjDQyvMZP4V2hEJ");
 
 // ── 常量 ──
 pub const MAX_SIGNERS: usize = 5;
@@ -155,7 +155,7 @@ pub mod bridge {
 
         // 验证多签
         let multisig = &ctx.accounts.multisig;
-        let proposal = &ctx.accounts.proposal;
+        let proposal = &mut ctx.accounts.proposal;
 
         require!(
             proposal.status == ProposalStatus::Approved,
@@ -164,6 +164,10 @@ pub mod bridge {
         require!(
             proposal.approvals.len() >= multisig.threshold as usize,
             BridgeError::InsufficientApprovals
+        );
+        require!(
+            !proposal.executed,
+            BridgeError::AlreadyExecuted
         );
 
         let clock = Clock::get()?;
@@ -225,6 +229,9 @@ pub mod bridge {
             );
             token::transfer(fee_cpi_ctx, fee)?;
         }
+
+        proposal.executed = true;
+        proposal.status = ProposalStatus::Executed;
 
         config.total_unlocked += user_amount;
 
@@ -428,7 +435,7 @@ pub struct Initialize<'info> {
         seeds = [b"config"],
         bump
     )]
-    pub config: Account<'info, BridgeConfig>,
+    pub config: Box<Account<'info, BridgeConfig>>,
 
     #[account(
         init,
@@ -437,7 +444,7 @@ pub struct Initialize<'info> {
         seeds = [b"multisig"],
         bump
     )]
-    pub multisig: Account<'info, Multisig>,
+    pub multisig: Box<Account<'info, Multisig>>,
 
     /// CHECK: Vault token account PDA
     #[account(
@@ -448,7 +455,7 @@ pub struct Initialize<'info> {
         seeds = [b"vault"],
         bump
     )]
-    pub vault_token_account: Account<'info, TokenAccount>,
+    pub vault_token_account: Box<Account<'info, TokenAccount>>,
 
     /// CHECK: BBT mint
     pub bbt_mint: AccountInfo<'info>,
@@ -820,4 +827,6 @@ pub enum BridgeError {
     AlreadyPaused,
     #[msg("Bridge not paused")]
     NotPaused,
+    #[msg("Proposal already executed")]
+    AlreadyExecuted,
 }

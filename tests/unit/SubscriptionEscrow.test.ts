@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { SignalMerkleTree, SubscriptionEscrowClient } from '../../src/infra/chain/SubscriptionEscrow.js';
 
 const stubLogger = { info: () => {}, debug: () => {}, warn: () => {}, error: () => {}, child: () => stubLogger } as any;
@@ -68,5 +69,93 @@ describe('SubscriptionEscrowClient', () => {
     });
     // internal state updated
     expect(client).toBeDefined();
+  });
+
+  it('supports mock mode constructor', () => {
+    const client = new SubscriptionEscrowClient(stubLogger, 'http://localhost:8899');
+    expect(client).toBeDefined();
+  });
+
+  it('supports real mode constructor', () => {
+    const connection = new Connection('http://localhost:8899');
+    const wallet = { publicKey: new PublicKey('11111111111111111111111111111112') };
+    const client = new SubscriptionEscrowClient(connection, wallet);
+    expect(client).toBeDefined();
+  });
+
+  it('derives subscription PDA deterministically', () => {
+    const client = new SubscriptionEscrowClient(stubLogger);
+    const userWallet = new PublicKey('11111111111111111111111111111112');
+    const [pda1, bump1] = client.deriveSubscriptionPDA(userWallet, 'strat_001', BigInt(123));
+    const [pda2, bump2] = client.deriveSubscriptionPDA(userWallet, 'strat_001', BigInt(123));
+    expect(pda1.equals(pda2)).toBe(true);
+    expect(bump1).toBe(bump2);
+  });
+
+  it('derives different PDAs for different nonces', () => {
+    const client = new SubscriptionEscrowClient(stubLogger);
+    const userWallet = new PublicKey('11111111111111111111111111111112');
+    const [pda1] = client.deriveSubscriptionPDA(userWallet, 'strat_001', BigInt(123));
+    const [pda2] = client.deriveSubscriptionPDA(userWallet, 'strat_001', BigInt(456));
+    expect(pda1.equals(pda2)).toBe(false);
+  });
+
+  it('creates subscription with new params (mock)', async () => {
+    const client = new SubscriptionEscrowClient(stubLogger);
+    const userKeypair = { publicKey: new PublicKey('11111111111111111111111111111112') };
+    const result = await client.createSubscription(userKeypair, {
+      providerWallet: new PublicKey('11111111111111111111111111111113'),
+      strategyId: 'strat_001',
+      amount: BigInt(1000000),
+      durationSeconds: 86400,
+      nonce: BigInt(123456),
+      bbtMint: new PublicKey('11111111111111111111111111111114'),
+    });
+    expect(result.subscriptionPDA).toBeInstanceOf(PublicKey);
+    expect(result.tx).toBe('mock_tx_id');
+  });
+
+  it('providerClaim accepts bbtMint (mock)', async () => {
+    const client = new SubscriptionEscrowClient(stubLogger);
+    const providerKeypair = { publicKey: new PublicKey('11111111111111111111111111111112') };
+    const subscriptionPDA = new PublicKey('11111111111111111111111111111113');
+    const bbtMint = new PublicKey('11111111111111111111111111111114');
+    const tx = await client.providerClaim(providerKeypair, subscriptionPDA, bbtMint);
+    expect(tx).toBe('mock_claim_tx');
+  });
+
+  it('userCancel accepts bbtMint (mock)', async () => {
+    const client = new SubscriptionEscrowClient(stubLogger);
+    const userKeypair = { publicKey: new PublicKey('11111111111111111111111111111112') };
+    const subscriptionPDA = new PublicKey('11111111111111111111111111111113');
+    const bbtMint = new PublicKey('11111111111111111111111111111114');
+    const tx = await client.userCancel(userKeypair, subscriptionPDA, bbtMint);
+    expect(tx).toBe('mock_cancel_tx');
+  });
+
+  it('submitHeartbeat returns tx (mock)', async () => {
+    const client = new SubscriptionEscrowClient(stubLogger);
+    const providerKeypair = { publicKey: new PublicKey('11111111111111111111111111111112') };
+    const subscriptionPDA = new PublicKey('11111111111111111111111111111113');
+    const tx = await client.submitHeartbeat(providerKeypair, subscriptionPDA);
+    expect(tx).toBe('mock_heartbeat_tx');
+  });
+
+  it('submitSignalMerkle returns tx with Buffer root (mock)', async () => {
+    const client = new SubscriptionEscrowClient(stubLogger);
+    const providerKeypair = { publicKey: new PublicKey('11111111111111111111111111111112') };
+    const subscriptionPDA = new PublicKey('11111111111111111111111111111113');
+    const root = Buffer.alloc(32, 0xab);
+    const tx = await client.submitSignalMerkle(providerKeypair, subscriptionPDA, root, BigInt(42));
+    expect(tx).toBe('mock_merkle_tx');
+  });
+
+  it('submitSignalMerkle returns tx with number[] root (mock)', async () => {
+    const client = new SubscriptionEscrowClient(stubLogger);
+    const providerKeypair = { publicKey: new PublicKey('11111111111111111111111111111112') };
+    const subscriptionPDA = new PublicKey('11111111111111111111111111111113');
+    const root = Array.from(Buffer.alloc(32, 0xcd));
+    const tx = await client.submitSignalMerkle(providerKeypair, subscriptionPDA, root, BigInt(99));
+    expect(tx).toBe('mock_merkle_tx');
   });
 });

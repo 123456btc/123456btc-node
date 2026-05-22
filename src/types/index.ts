@@ -104,6 +104,9 @@ export interface ProviderConfig {
   p2p_port?: number;
   admin_api_key: string;
   settlement_mode?: 'memo' | 'escrow';
+  escrow_program_id?: string;
+  provider_keypair_path?: string;
+  platform_wallet?: string;
 }
 
 // ───────────────────────────────────────────────
